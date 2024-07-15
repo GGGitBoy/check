@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -e
+
+cd $(dirname $0)/..
+
+if ! command -v golangci-lint; then
+    echo Skipping validation: no golangci-lint available
+    exit
+fi
+
+echo 'Running: golangci-lint'
+golangci-lint run --skip-files "zz_.*"
+
+echo 'Running: go mod verify'
+go mod verify
+
+echo 'Running: go fmt'
+go fmt
+
+echo 'Running: go mod tidy'
+go mod tidy

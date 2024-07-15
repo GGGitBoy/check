@@ -1,0 +1,56 @@
+kind: pipeline
+name: linux-amd64
+
+platform:
+  os: linux
+  arch: amd64
+
+steps:
+- name: build
+  image: rancher/dapper:v0.5.4
+  commands:
+    - dapper ci
+  volumes:
+    - name: docker
+      path: /var/run/docker.sock
+  when:
+    event:
+      - push
+      - pull_request
+      - tag
+
+- name: docker-publish
+  image: plugins/docker
+  settings:
+    dockerfile: package/Dockerfile
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password
+    repo: cnrancher/inspection-server
+    tag: "${DRONE_TAG}"
+  when:
+    event:
+    - tag
+
+- name: docker-publish-agent
+  image: plugins/docker
+  settings:
+    dockerfile: package/Dockerfile.agent
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password
+    repo: cnrancher/inspection-agent
+    tag: "${DRONE_TAG}"
+  when:
+    event:
+    - tag
+
+volumes:
+- name: docker
+  host:
+    path: /var/run/docker.sock
+
+node:
+  instance: agent-amd64

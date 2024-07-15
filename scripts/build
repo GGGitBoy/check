@@ -1,0 +1,16 @@
+#!/bin/bash
+set -e
+
+source $(dirname $0)/version
+
+cd $(dirname $0)/..
+
+mkdir -p bin
+#if [ "$(uname)" != "Darwin" ]; then
+#  LINKFLAGS="-extldflags -static"
+#  if [ -z "${DEBUG}" ]; then
+#    LINKFLAGS="${LINKFLAGS} -s"
+#  fi
+#fi
+
+CGO_ENABLED=1 go build -ldflags "-X main.VERSION=$VERSION -extldflags -static" -o bin/inspection-server main.go

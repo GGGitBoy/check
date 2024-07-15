@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: inspection-agent
+  namespace: cattle-inspection-system
+spec:
+  selector:
+    matchLabels:
+      name: inspection-agent
+  template:
+    metadata:
+      labels:
+        name: inspection-agent
+    spec:
+      containers:
+        - name: inspection-agent-container
+          image: {{ .Values.Image }}
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: true
+            privileged: true
+          stdin: true
+          volumeMounts:
+          - mountPath: /inspection
+            name: inspection
+{{- if .Values.SetDocker }}
+          - mountPath: /var/run/docker.sock
+            name: docker-socket
+{{- end }}
+{{- if .Values.SetContainerd }}
+          - mountPath: /var/run/containerd/containerd.sock
+            name: containerd-socket
+{{- end }}
+          - mountPath: /opt/inspection
+            name: inspection-agent-sh
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      restartPolicy: Always
+      serviceAccount: inspection-agent
+      serviceAccountName: inspection-agent
+      volumes:
+      - hostPath:
+          path: /
+          type: ""
+        name: inspection
+{{- if .Values.SetDocker }}
+      - hostPath:
+          path: /var/run/docker.sock
+          type: ""
+        name: docker-socket
+{{- end }}
+{{- if .Values.SetContainerd }}
+      - hostPath:
+          path: /var/run/k3s/containerd/containerd.sock
+          type: ""
+        name: containerd-socket
+{{- end }}
+      - configMap:
+          defaultMode: 448
+          name: inspection-agent-sh
+          optional: false
+        name: inspection-agent-sh

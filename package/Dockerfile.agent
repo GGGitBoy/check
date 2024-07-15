@@ -1,0 +1,39 @@
+# 基础镜像
+FROM alpine:latest
+
+RUN apk add --no-cache \
+    curl \
+    bash \
+    jq \
+    docker \
+    bash \
+    wget \
+    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/ \
+    && wget -qO- https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.28.0/crictl-v1.28.0-linux-amd64.tar.gz | tar -xz -C /usr/local/bin
+
+
+#FROM docker \
+#
+
+#USER root
+
+# 启动 Docker in Docker
+#ENTRYPOINT ["dockerd-entrypoint.sh"]
+
+# 暴露 Docker 端口
+#EXPOSE 2375
+
+
+# 例如，下载 crictl v1.23.0 版本
+#wget https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.23.0/crictl-v1.23.0-linux-amd64.tar.gz
+#tar -zxvf crictl-v1.23.0-linux-amd64.tar.gz
+#mv crictl /usr/local/bin/
+#
+#
+## 例如，下载 ctr v1.5.2 版本
+#wget https://github.com/containerd/cri/releases/download/v1.5.2/ctr-1.5.2-linux-amd64.tar.gz
+#tar -zxvf ctr-1.5.2-linux-amd64.tar.gz
+#mv ctr /usr/local/bin/
+

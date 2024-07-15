@@ -1,0 +1,36 @@
+apiVersion: v1
+data:
+  inspection.sh: |-
+    #!/bin/bash
+
+    commands=("$@")
+    results=()
+
+    for command in "${commands[@]}"; do
+        description=$(echo "$command" | cut -d ':' -f 1)
+        command_desc=$(echo "$command" | cut -d ':' -f 2-)
+
+        result=$(eval "${command_desc}" 2>&1)
+        status=$?
+
+        if [ $status -ne 0 ]; then
+            result="{\"description\": \"${description}\", \"command\": \"${command_desc}\", \"error\": \"$(echo "$result" | tail -n 1)\"}"
+        else
+            result="{\"description\": \"${description}\", \"command\": \"${command_desc}\", \"response\": \"${result}\"}"
+        fi
+
+        results+=("$result")
+    done
+
+    echo -n "["
+    for ((i=0; i<${#results[@]}; i++)); do
+        echo -n "${results[i]}"
+        if [ $i -lt $((${#results[@]} - 1)) ]; then
+            echo -n ","
+        fi
+    done
+    echo -n "]"
+kind: ConfigMap
+metadata:
+  name: inspection-agent-sh
+  namespace: cattle-inspection-system

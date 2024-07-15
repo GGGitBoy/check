@@ -1,0 +1,16 @@
+FROM registry.suse.com/bci/golang:1.19
+
+ENV DAPPER_ENV REPO TAG DRONE_TAG
+ENV DAPPER_SOURCE /go/src/github.com/cnrancher/inspection-server/
+ENV DAPPER_OUTPUT ./bin ./dist
+ENV DAPPER_DOCKER_SOCKET true
+ENV HOME ${DAPPER_SOURCE}
+ENV GO111MODULE on
+WORKDIR ${DAPPER_SOURCE}
+
+RUN zypper -n install gcc binutils glibc-devel-static
+#RUN zypper -n install ca-certificates git-core wget curl unzip tar vim less file xz gzip sed gawk iproute2 iptables jq skopeo
+RUN zypper install -y -f docker && rpm -e --nodeps --noscripts containerd
+
+ENTRYPOINT ["sh", "./scripts/entry"]
+CMD ["ci"]
