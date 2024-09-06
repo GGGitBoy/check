@@ -14,7 +14,10 @@ import (
 	"time"
 )
 
-var waitSecond = 60
+var (
+	waitSecond  = 60
+	waitTimeOut = 30
+)
 
 type Print struct {
 	URL        string `json:"url"`
@@ -33,6 +36,15 @@ func FullScreenshot(print *Print, taskName string) error {
 			logrus.Errorf("Invalid PrintWaitSecond value, using default: %v", err)
 		} else {
 			waitSecond = num
+		}
+	}
+
+	if common.PrintWaitTimeOut != "" {
+		num, err := strconv.Atoi(common.PrintWaitTimeOut)
+		if err != nil {
+			logrus.Errorf("Invalid PrintWaitTimeOut value, using default: %v", err)
+		} else {
+			waitTimeOut = num
 		}
 	}
 
@@ -59,7 +71,7 @@ func FullScreenshot(print *Print, taskName string) error {
 	}
 
 	logrus.Infof("[%s] Starting wait load", taskName)
-	err = page.Timeout(15 * time.Minute).WaitLoad()
+	err = page.Timeout(time.Duration(waitTimeOut) * time.Minute).WaitLoad()
 	if err != nil {
 		return fmt.Errorf("Failed to wait load: %v\n", err)
 	}
@@ -67,7 +79,7 @@ func FullScreenshot(print *Print, taskName string) error {
 	time.Sleep(time.Duration(waitSecond) * time.Second)
 	logrus.Infof("[%s] Starting page scroll", taskName)
 
-	_, err = page.Timeout(15 * time.Minute).Eval(`() => {
+	_, err = page.Timeout(time.Duration(waitTimeOut) * time.Minute).Eval(`() => {
 		var totalHeight = 0;
 		var distance = 100;
 		var timer = setInterval(() => {
@@ -86,14 +98,14 @@ func FullScreenshot(print *Print, taskName string) error {
 	time.Sleep(time.Duration(waitSecond) * time.Second)
 
 	logrus.Infof("[%s] Starting page wait scroll end", taskName)
-	err = page.Timeout(15 * time.Minute).Wait(rod.Eval(`() => document.body.scrollHeight <= (window.scrollY + window.innerHeight)`))
+	err = page.Timeout(time.Duration(waitTimeOut)).Wait(rod.Eval(`() => document.body.scrollHeight <= (window.scrollY + window.innerHeight)`))
 	if err != nil {
 		return fmt.Errorf("Error while waiting for page scroll completion: %v\n", err)
 	}
 
 	logrus.Infof("[%s] Starting get page width, height", taskName)
 
-	metrics, err := page.Timeout(15 * time.Minute).Eval(`() => ({
+	metrics, err := page.Timeout(time.Duration(waitTimeOut)).Eval(`() => ({
 		width: document.body.scrollWidth,
 		height: document.body.scrollHeight,
 	})`)
@@ -111,14 +123,14 @@ func FullScreenshot(print *Print, taskName string) error {
 	}
 	logrus.Infof("[%s] Screenshot captured successfully", taskName)
 
-	err = common.WriteFile(common.PrintShotPath, screenshot)
+	err = common.WriteFile(common.PrintPDFPath+common.GetShotName(print.ReportTime), screenshot)
 	if err != nil {
 		return fmt.Errorf("Failed to save screenshot: %v\n", err)
 	}
 
 	logrus.Infof("[%s] Starting create PDF", taskName)
 
-	imgFile, err := os.Open(common.PrintShotPath)
+	imgFile, err := os.Open(common.PrintPDFPath + common.GetShotName(print.ReportTime))
 	if err != nil {
 		return fmt.Errorf("Failed to open screenshot file: %v\n", err)
 	}
@@ -144,7 +156,7 @@ func FullScreenshot(print *Print, taskName string) error {
 	pdf.Start(gopdf.Config{PageSize: *rect})
 	pdf.AddPage()
 
-	err = pdf.Image(common.PrintShotPath, 0, 0, rect)
+	err = pdf.Image(common.PrintPDFPath+common.GetShotName(print.ReportTime), 0, 0, rect)
 	if err != nil {
 		return fmt.Errorf("Failed to add image to PDF: %v\n", err)
 	}

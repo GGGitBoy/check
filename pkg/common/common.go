@@ -23,14 +23,12 @@ var (
 	AgentScriptName     = "inspection-agent-sh"
 	InspectionNamespace = "cattle-inspection-system"
 
-	PrintWaitSecond = getEnv("PRINT_WAIT_SECOND", "")
+	PrintWaitSecond  = getEnv("PRINT_WAIT_SECOND", "")
+	PrintWaitTimeOut = getEnv("PRINT_WAIT_TIMEOUT", "")
 
 	LocalCluster = "local"
 
-	WorkDir = "/opt/"
-	//WorkDir = "/Users/chenjiandao/jiandao/inspection-server/opt/"
-
-	PrintShotPath       = WorkDir + "db/print/screenshot.png"
+	WorkDir             = "/opt/"
 	PrintPDFPath        = WorkDir + "db/print/"
 	WriteKubeconfigPath = WorkDir + "db/kubeconfig/"
 
@@ -54,5 +52,11 @@ func getEnv(key, defaultValue string) string {
 func GetReportFileName(time string) string {
 	fileName := fmt.Sprintf("Report(%s).pdf", time)
 	logrus.Debugf("Generated report file name: %s", fileName)
+	return fileName
+}
+
+func GetShotName(time string) string {
+	fileName := fmt.Sprintf("screenshot(%s).png", time)
+	logrus.Debugf("Generated screen shot png name: %s", fileName)
 	return fileName
 }
