@@ -16,7 +16,7 @@ import (
 
 var (
 	waitSecond  = 60
-	waitTimeOut = 30
+	waitTimeOut = 120
 )
 
 type Print struct {
