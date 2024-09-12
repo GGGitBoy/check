@@ -104,13 +104,13 @@ func GetLoc() *time.Location {
 func ExecuteTask(task *apis.Task) {
 	logrus.Infof("[%s] Executing task %s", task.Name, task.ID)
 
-	err := core.Inspection(task)
+	state, err := core.Inspection(task)
 	if err != nil {
 		logrus.Errorf("[%s] Inspection failed for task %s: %v", task.Name, task.ID, err)
 		var errMessage strings.Builder
-		errMessage.WriteString(fmt.Sprintf("巡检失败: %v\n", err))
+		errMessage.WriteString(fmt.Sprintf("失败原因: %v\n", err))
 		task.EndTime = time.Now().Format("2006-01-02 15:04:05")
-		task.State = "巡检失败"
+		task.State = state
 		task.ErrMessage = errMessage.String()
 		updateErr := db.UpdateTask(task)
 		if updateErr != nil {

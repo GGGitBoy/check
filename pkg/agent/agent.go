@@ -18,7 +18,7 @@ import (
 	"text/template"
 )
 
-var image = "cnrancher/inspection-agent:v1.0.0"
+var agentImage = "cnrancher/inspection-agent:v1.0.0"
 
 func Register() error {
 	logrus.Infof("[Agent] Starting registration of inspection agents")
@@ -214,8 +214,9 @@ func ApplyDaemonSet(clientset *kubernetes.Clientset) error {
 		return err
 	}
 
+	var image string
 	if common.SystemDefaultRegistry != "" {
-		image = fmt.Sprintf("%s/%s", common.SystemDefaultRegistry, image)
+		image = fmt.Sprintf("%s/%s", common.SystemDefaultRegistry, agentImage)
 	}
 
 	var rendered bytes.Buffer
