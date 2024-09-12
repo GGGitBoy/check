@@ -5,6 +5,8 @@ RUN apt-get update \
     && apt-get install -y \
         tzdata \
         fonts-noto-cjk \
+        iputils-ping \
+        curl \
         wget
 
 # 安装 Chromium 作为 deb 包而不是 Snap 包

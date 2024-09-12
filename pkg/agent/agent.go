@@ -217,6 +217,8 @@ func ApplyDaemonSet(clientset *kubernetes.Clientset) error {
 	var image string
 	if common.SystemDefaultRegistry != "" {
 		image = fmt.Sprintf("%s/%s", common.SystemDefaultRegistry, agentImage)
+	} else {
+		image = agentImage
 	}
 
 	var rendered bytes.Buffer
