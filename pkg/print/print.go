@@ -100,8 +100,13 @@ func FullScreenshot(print *Print, taskName string) error {
 	viewportHeight := 5000
 	currentHeight := 0
 	for currentHeight < viewPageHeight {
+
+		portHeight := viewPageHeight - currentHeight
+		if portHeight > viewportHeight {
+			portHeight = viewportHeight
+		}
 		// 设置当前视口的大小
-		page.MustSetViewport(viewPageWidth, viewportHeight, 1, false)
+		page.MustSetViewport(viewPageWidth, portHeight, 1, false)
 
 		// 滚动到当前高度
 		_, err = page.Timeout(time.Duration(waitTimeOut) * time.Minute).Eval(fmt.Sprintf(`() => {window.scrollTo(0, %d);}`, currentHeight))
@@ -135,7 +140,7 @@ func FullScreenshot(print *Print, taskName string) error {
 		allScreenshots = append(allScreenshots, img)
 
 		// 更新当前高度，继续下一个视口的截图
-		currentHeight += viewportHeight
+		currentHeight += portHeight
 		time.Sleep(2 * time.Second) // 等待一段时间确保页面加载
 	}
 
