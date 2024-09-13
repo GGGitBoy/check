@@ -19,24 +19,24 @@ var (
 	notifyFailed     = "通知失败"
 )
 
-func Inspection(task *apis.Task) (string, error) {
+func Inspection(task *apis.Task) (*apis.Task, string, error) {
 	task.State = "巡检中"
 	logrus.Infof("[%s] Starting inspection for task ID: %s", task.Name, task.ID)
 
 	err := db.UpdateTask(task)
 	if err != nil {
-		return inspectionFailed, fmt.Errorf("Failed to update task state to '巡检中' for task ID %s: %v\n", task.ID, err)
+		return task, inspectionFailed, fmt.Errorf("Failed to update task state to '巡检中' for task ID %s: %v\n", task.ID, err)
 	}
 
 	template, err := db.GetTemplate(task.TemplateID)
 	if err != nil {
-		return inspectionFailed, fmt.Errorf("Failed to get template for task ID %s: %v\n", task.ID, err)
+		return task, inspectionFailed, fmt.Errorf("Failed to get template for task ID %s: %v\n", task.ID, err)
 	}
 
 	clients := apis.NewClients()
 	err = common.GenerateKubeconfig(clients)
 	if err != nil {
-		return inspectionFailed, fmt.Errorf("Failed to generate kubeconfig: %v\n", err)
+		return task, inspectionFailed, fmt.Errorf("Failed to generate kubeconfig: %v\n", err)
 	}
 
 	report := apis.NewReport()
@@ -44,7 +44,7 @@ func Inspection(task *apis.Task) (string, error) {
 
 	allGrafanaInspections, err := GetAllGrafanaInspections(task.Name)
 	if err != nil {
-		return inspectionFailed, fmt.Errorf("Failed to get all Grafana inspections: %v\n", err)
+		return task, inspectionFailed, fmt.Errorf("Failed to get all Grafana inspections: %v\n", err)
 	}
 
 	level := 0
@@ -66,26 +66,26 @@ func Inspection(task *apis.Task) (string, error) {
 
 				healthCheck, coreInspectionArray, err := GetHealthCheck(client, k.ClusterName, task.Name)
 				if err != nil {
-					return inspectionFailed, fmt.Errorf("Failed to get health check for cluster %s: %v\n", k.ClusterID, err)
+					return task, inspectionFailed, fmt.Errorf("Failed to get health check for cluster %s: %v\n", k.ClusterID, err)
 				}
 				coreInspections = append(coreInspections, coreInspectionArray...)
 
 				NodeNodeArray, nodeInspectionArray, err := GetNodes(client, k.ClusterNodeConfig.NodeConfig, task.Name)
 				if err != nil {
-					return inspectionFailed, fmt.Errorf("Failed to get nodes for cluster %s: %v\n", k.ClusterID, err)
+					return task, inspectionFailed, fmt.Errorf("Failed to get nodes for cluster %s: %v\n", k.ClusterID, err)
 				}
 				nodeInspections = append(nodeInspections, nodeInspectionArray...)
 
 				ResourceWorkloadArray, resourceInspectionArray, err := GetWorkloads(client, k.ClusterResourceConfig.WorkloadConfig, task.Name)
 				if err != nil {
-					return inspectionFailed, fmt.Errorf("Failed to get workloads for cluster %s: %v\n", k.ClusterID, err)
+					return task, inspectionFailed, fmt.Errorf("Failed to get workloads for cluster %s: %v\n", k.ClusterID, err)
 				}
 				resourceInspections = append(resourceInspections, resourceInspectionArray...)
 
 				if k.ClusterResourceConfig.NamespaceConfig.Enable {
 					ResourceNamespaceArray, resourceInspectionArray, err := GetNamespaces(client, task.Name)
 					if err != nil {
-						return inspectionFailed, fmt.Errorf("Failed to get namespaces for cluster %s: %v\n", k.ClusterID, err)
+						return task, inspectionFailed, fmt.Errorf("Failed to get namespaces for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.Namespace = ResourceNamespaceArray
@@ -95,7 +95,7 @@ func Inspection(task *apis.Task) (string, error) {
 				if k.ClusterResourceConfig.ServiceConfig.Enable {
 					ResourceServiceArray, resourceInspectionArray, err := GetServices(client, task.Name)
 					if err != nil {
-						return inspectionFailed, fmt.Errorf("Failed to get services for cluster %s: %v\n", k.ClusterID, err)
+						return task, inspectionFailed, fmt.Errorf("Failed to get services for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.Service = ResourceServiceArray
@@ -105,7 +105,7 @@ func Inspection(task *apis.Task) (string, error) {
 				if k.ClusterResourceConfig.IngressConfig.Enable {
 					ResourceIngressArray, resourceInspectionArray, err := GetIngress(client, task.Name)
 					if err != nil {
-						return inspectionFailed, fmt.Errorf("Failed to get ingress for cluster %s: %v\n", k.ClusterID, err)
+						return task, inspectionFailed, fmt.Errorf("Failed to get ingress for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.Ingress = ResourceIngressArray
@@ -199,8 +199,10 @@ func Inspection(task *apis.Task) (string, error) {
 	}
 	err = db.CreateReport(report)
 	if err != nil {
-		return inspectionFailed, fmt.Errorf("Failed to create report: %v\n", err)
+		return task, inspectionFailed, fmt.Errorf("Failed to create report: %v\n", err)
 	}
+	task.Rating = report.Global.Rating
+	task.ReportID = report.ID
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("该巡检报告的健康等级为: %s\n", report.Global.Rating))
@@ -214,39 +216,31 @@ func Inspection(task *apis.Task) (string, error) {
 	p.ReportTime = report.Global.ReportTime
 	err = pdfPrint.FullScreenshot(p, task.Name)
 	if err != nil {
-		return printFailed, fmt.Errorf("Failed to take screenshot for report ID %s: %v\n", report.ID, err)
+		return task, printFailed, fmt.Errorf("Failed to take screenshot for report ID %s: %v\n", report.ID, err)
 	}
 
 	if task.NotifyID != "" {
 		notify, err := db.GetNotify(task.NotifyID)
 		if err != nil {
-			return notifyFailed, fmt.Errorf("Failed to get notification details for NotifyID %s: %v\n", task.NotifyID, err)
+			return task, notifyFailed, fmt.Errorf("Failed to get notification details for NotifyID %s: %v\n", task.NotifyID, err)
 		}
 
 		if notify.WebhookURL != "" && notify.Secret != "" {
 			sb.WriteString(fmt.Sprintf("该巡检报告的访问地址为: %s/api/v1/namespaces/cattle-inspection-system/services/http:access-inspection:80/proxy/#/inspection/result/%s\n", common.ServerURL, report.ID))
 			err = send.Webhook(notify.WebhookURL, notify.Secret, sb.String(), task.Name)
 			if err != nil {
-				return notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
+				return task, notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
 			}
 		} else {
 			err = send.Notify(notify.AppID, notify.AppSecret, common.GetReportFileName(p.ReportTime), common.PrintPDFPath+common.GetReportFileName(p.ReportTime), sb.String(), task.Name)
 			if err != nil {
-				return notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
+				return task, notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
 			}
 		}
-
 	}
 
 	task.EndTime = time.Now().Format("2006-01-02 15:04:05")
-	task.Rating = report.Global.Rating
-	task.ReportID = report.ID
 	task.State = "巡检完成"
-	err = db.UpdateTask(task)
-	if err != nil {
-		return "巡检完成", fmt.Errorf("Failed to update task state to '巡检完成' for task ID %s: %v\n", task.ID, err)
-	}
-
 	logrus.Infof("[%s] Inspection completed for task ID: %s", task.Name, task.ID)
-	return "巡检完成", nil
+	return task, "巡检完成", nil
 }
