@@ -13,4 +13,4 @@ mkdir -p bin
 #  fi
 #fi
 
-CGO_ENABLED=1 go build -ldflags "-X main.VERSION=$VERSION -extldflags -static" -o bin/inspection-server main.go
+CGO_ENABLED=0 go build -ldflags "-X main.VERSION=$VERSION -extldflags -static" -o bin/inspection-server main.go

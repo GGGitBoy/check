@@ -1,0 +1,54 @@
+name: Push to Master
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*" # Matches any tag that starts with 'v' and follows semantic versioning
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Login to Dockerhub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: CI
+        run: make ci
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: cnrancher/inspection-server
+          tags: |
+            type=ref,event=tag
+            type=ref,event=branch
+      - name: Docker meta
+        id: meta-agent
+        uses: docker/metadata-action@v5
+        with:
+          images: cnrancher/inspection-agent
+          tags: |
+            type=ref,event=tag
+            type=ref,event=branch
+      - name: Build to Dockerhub
+        uses: docker/build-push-action@v6
+        with:
+          file: package/Dockerfile
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: "${{ steps.meta.outputs.tags }}"
+          context: "."
+          push: true
+      - name: Build Agent to Dockerhub
+        uses: docker/build-push-action@v6
+        with:
+          file: package/Dockerfile.agent
+          labels: ${{ steps.meta-agent.outputs.labels }}
+          tags: "${{ steps.meta-agent.outputs.tags }}"
+          context: "."
+          push: true

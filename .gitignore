@@ -24,3 +24,6 @@
 # vendor/
 
 *.png
+
+**/Dockerfile.dapper*
+!**/Dockerfile.dapper
