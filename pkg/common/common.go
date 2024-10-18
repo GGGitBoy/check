@@ -17,6 +17,7 @@ var (
 	MySQLPort             = getEnv("MY_SQL_PORT", "")
 	MySQLDB               = getEnv("MY_SQL_DB", "")
 	SystemDefaultRegistry = getEnv("SYSTEM_DEFAULT_REGISTRY", "")
+	PrintPDFEnable        = getEnv("PRINT_PDF_ENABLE", "")
 
 	SQLiteName          = "sqlite.db"
 	AgentName           = "inspection-agent"

@@ -88,6 +88,11 @@ func main() {
 			Value:  "",
 			Usage:  "Set system default registry.",
 		},
+		cli.BoolFlag{
+			Name:   "printPDFEnable",
+			EnvVar: "PRINT_PDF_ENABLE",
+			Usage:  "enable print pdf.",
+		},
 	}
 
 	app.Action = func(ctx *cli.Context) error {

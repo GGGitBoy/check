@@ -214,9 +214,12 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 	p := pdfPrint.NewPrint()
 	p.URL = "http://127.0.0.1/#/inspection/result-pdf-view/" + report.ID
 	p.ReportTime = report.Global.ReportTime
-	err = pdfPrint.FullScreenshot(p, task.Name)
-	if err != nil {
-		return task, printFailed, fmt.Errorf("Failed to take screenshot for report ID %s: %v\n", report.ID, err)
+
+	if common.PrintPDFEnable == "true" {
+		err = pdfPrint.FullScreenshot(p, task.Name)
+		if err != nil {
+			return task, printFailed, fmt.Errorf("Failed to take screenshot for report ID %s: %v\n", report.ID, err)
+		}
 	}
 
 	if task.NotifyID != "" {
@@ -225,8 +228,8 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 			return task, notifyFailed, fmt.Errorf("Failed to get notification details for NotifyID %s: %v\n", task.NotifyID, err)
 		}
 
+		sb.WriteString(fmt.Sprintf("该巡检报告的访问地址为: %s/api/v1/namespaces/cattle-inspection-system/services/http:access-inspection:80/proxy/#/inspection/result/%s\n", common.ServerURL, report.ID))
 		if notify.WebhookURL != "" && notify.Secret != "" {
-			sb.WriteString(fmt.Sprintf("该巡检报告的访问地址为: %s/api/v1/namespaces/cattle-inspection-system/services/http:access-inspection:80/proxy/#/inspection/result/%s\n", common.ServerURL, report.ID))
 			err = send.Webhook(notify.WebhookURL, notify.Secret, sb.String(), task.Name)
 			if err != nil {
 				return task, notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)

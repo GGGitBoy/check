@@ -13,6 +13,7 @@ import (
 	larkauth "github.com/larksuite/oapi-sdk-go/v3/service/auth/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/sirupsen/logrus"
+	"inspection-server/pkg/common"
 	"io"
 	"net/http"
 	"os"
@@ -146,41 +147,44 @@ func Notify(appID, appSecret, fileName, filePath, message, taskName string) erro
 		"Authorization": []string{fmt.Sprintf("Bearer %s", appAccessTokenResp.AppAccessToken)},
 	})
 
-	// 打开文件
-	file, err := os.Open(filePath)
-	if err != nil {
-		logrus.Errorf("Error opening file %s: %v", filePath, err)
-		return fmt.Errorf("failed to open file %s: %v", filePath, err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			logrus.Warnf("Error closing file %s: %v", filePath, err)
+	var createFileResp *larkim.CreateFileResp
+	if common.PrintPDFEnable == "true" {
+		// 打开文件
+		file, err := os.Open(filePath)
+		if err != nil {
+			logrus.Errorf("Error opening file %s: %v", filePath, err)
+			return fmt.Errorf("failed to open file %s: %v", filePath, err)
 		}
-	}()
+		defer func() {
+			if err := file.Close(); err != nil {
+				logrus.Warnf("Error closing file %s: %v", filePath, err)
+			}
+		}()
 
-	// 创建文件上传请求对象
-	createFileReq := larkim.NewCreateFileReqBuilder().
-		Body(larkim.NewCreateFileReqBodyBuilder().
-			FileType(`pdf`).
-			FileName(fileName).
-			File(file).
-			Build()).
-		Build()
+		// 创建文件上传请求对象
+		createFileReq := larkim.NewCreateFileReqBuilder().
+			Body(larkim.NewCreateFileReqBodyBuilder().
+				FileType(`pdf`).
+				FileName(fileName).
+				File(file).
+				Build()).
+			Build()
 
-	// 发起文件上传请求
-	createFileResp, err := client.Im.File.Create(context.Background(), createFileReq, requestOptionFunc)
-	if err != nil {
-		logrus.Errorf("Error creating file in Lark: %v", err)
-		return fmt.Errorf("failed to create file in Lark: %v", err)
+		// 发起文件上传请求
+		createFileResp, err = client.Im.File.Create(context.Background(), createFileReq, requestOptionFunc)
+		if err != nil {
+			logrus.Errorf("Error creating file in Lark: %v", err)
+			return fmt.Errorf("failed to create file in Lark: %v", err)
+		}
+
+		// 服务端错误处理
+		if !createFileResp.Success() {
+			logrus.Errorf("Server error creating file: Code=%d, Msg=%s, RequestID=%s", createFileResp.Code, createFileResp.Msg, createFileResp.RequestId())
+			return fmt.Errorf("server error creating file: Code=%d, Msg=%s, RequestID=%s", createFileResp.Code, createFileResp.Msg, createFileResp.RequestId())
+		}
+
+		logrus.Debugf("File created successfully: %s", larkcore.Prettify(createFileResp))
 	}
-
-	// 服务端错误处理
-	if !createFileResp.Success() {
-		logrus.Errorf("Server error creating file: Code=%d, Msg=%s, RequestID=%s", createFileResp.Code, createFileResp.Msg, createFileResp.RequestId())
-		return fmt.Errorf("server error creating file: Code=%d, Msg=%s, RequestID=%s", createFileResp.Code, createFileResp.Msg, createFileResp.RequestId())
-	}
-
-	logrus.Debugf("File created successfully: %s", larkcore.Prettify(createFileResp))
 
 	// 创建列表聊天请求对象
 	listChatReq := larkim.NewListChatReqBuilder().
@@ -235,28 +239,30 @@ func Notify(appID, appSecret, fileName, filePath, message, taskName string) erro
 
 		logrus.Infof("[%s] Text message sent successfully to chat %s", taskName, *i.ChatId)
 
-		// 发送文件消息
-		createFileMessageReq := larkim.NewCreateMessageReqBuilder().
-			ReceiveIdType(`chat_id`).
-			Body(larkim.NewCreateMessageReqBodyBuilder().
-				ReceiveId(*i.ChatId).
-				MsgType(`file`).
-				Content("{\"file_key\":\"" + *createFileResp.Data.FileKey + "\"}").
-				Build()).
-			Build()
+		if common.PrintPDFEnable == "true" {
+			// 发送文件消息
+			createFileMessageReq := larkim.NewCreateMessageReqBuilder().
+				ReceiveIdType(`chat_id`).
+				Body(larkim.NewCreateMessageReqBodyBuilder().
+					ReceiveId(*i.ChatId).
+					MsgType(`file`).
+					Content("{\"file_key\":\"" + *createFileResp.Data.FileKey + "\"}").
+					Build()).
+				Build()
 
-		createFileMessageResp, err := client.Im.Message.Create(context.Background(), createFileMessageReq, requestOptionFunc)
-		if err != nil {
-			logrus.Errorf("Error sending file message to chat %s: %v", *i.ChatId, err)
-			return fmt.Errorf("failed to send file message to chat %s: %v", *i.ChatId, err)
+			createFileMessageResp, err := client.Im.Message.Create(context.Background(), createFileMessageReq, requestOptionFunc)
+			if err != nil {
+				logrus.Errorf("Error sending file message to chat %s: %v", *i.ChatId, err)
+				return fmt.Errorf("failed to send file message to chat %s: %v", *i.ChatId, err)
+			}
+
+			if !createFileMessageResp.Success() {
+				logrus.Errorf("Server error sending file message: Code=%d, Msg=%s, RequestID=%s", createFileMessageResp.Code, createFileMessageResp.Msg, createFileMessageResp.RequestId())
+				return fmt.Errorf("server error sending file message: Code=%d, Msg=%s, RequestID=%s", createFileMessageResp.Code, createFileMessageResp.Msg, createFileMessageResp.RequestId())
+			}
+
+			logrus.Infof("[%s] File message sent successfully to chat %s", taskName, *i.ChatId)
 		}
-
-		if !createFileMessageResp.Success() {
-			logrus.Errorf("Server error sending file message: Code=%d, Msg=%s, RequestID=%s", createFileMessageResp.Code, createFileMessageResp.Msg, createFileMessageResp.RequestId())
-			return fmt.Errorf("server error sending file message: Code=%d, Msg=%s, RequestID=%s", createFileMessageResp.Code, createFileMessageResp.Msg, createFileMessageResp.RequestId())
-		}
-
-		logrus.Infof("[%s] File message sent successfully to chat %s", taskName, *i.ChatId)
 	}
 
 	return nil
