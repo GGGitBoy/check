@@ -212,12 +212,6 @@ func DeleteTask() http.Handler {
 				return
 			}
 		} else if task.Mode == "计划任务" || (task.Mode == "周期任务" && task.TaskID != "") {
-			if task.State == "巡检中" {
-				logrus.Warnf("Task deletion failed: Task with ID %s is currently in progress", taskID)
-				common.HandleError(rw, http.StatusInternalServerError, fmt.Errorf("巡检中的计划不能删除"))
-				return
-			}
-
 			err = schedule.RemoveSchedule(task)
 			if err != nil {
 				logrus.Errorf("Failed to remove schedule for task with ID %s: %v", taskID, err)

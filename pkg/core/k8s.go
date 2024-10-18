@@ -717,9 +717,11 @@ func GetIngress(client *apis.Client, taskName string) ([]*apis.Ingress, []*apis.
 	for _, i := range ingressList.Items {
 		for _, rule := range i.Spec.Rules {
 			host := rule.Host
-			for _, path := range rule.HTTP.Paths {
-				key := host + path.Path
-				ingressMap[key] = append(ingressMap[key], fmt.Sprintf("%s/%s", i.Namespace, i.Name))
+			if rule.HTTP != nil {
+				for _, path := range rule.HTTP.Paths {
+					key := host + path.Path
+					ingressMap[key] = append(ingressMap[key], fmt.Sprintf("%s/%s", i.Namespace, i.Name))
+				}
 			}
 		}
 
