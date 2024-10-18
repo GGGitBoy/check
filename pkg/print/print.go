@@ -73,6 +73,7 @@ func FullScreenshot(print *Print, taskName string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to get page: %v\n", err)
 	}
+	defer page.Close()
 
 	logrus.Infof("[%s] Starting wait load", taskName)
 	err = page.Timeout(time.Duration(waitTimeOut) * time.Minute).WaitLoad()
