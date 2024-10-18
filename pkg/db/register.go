@@ -81,7 +81,7 @@ func GetDB() (*sql.DB, error) {
 		}
 		logrus.Infof("[DB] Connected to MySQL database successfully")
 	} else {
-		DB, err = sql.Open("sqlite3", common.SQLiteName)
+		DB, err = sql.Open("sqlite", common.SQLiteName)
 		if err != nil {
 			return nil, fmt.Errorf("Error opening SQLite connection: %v, DB Name: %s\n", err, common.SQLiteName)
 		}
