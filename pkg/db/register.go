@@ -3,8 +3,8 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	_ "github.com/glebarez/sqlite"
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 	"inspection-server/pkg/common"
 	"time"
