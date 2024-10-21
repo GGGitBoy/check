@@ -44,7 +44,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 
 	allGrafanaInspections, err := GetAllGrafanaInspections(task.Name)
 	if err != nil {
-		return task, inspectionFailed, fmt.Errorf("Failed to get all Grafana inspections: %v\n", err)
+		logrus.Errorf("Failed to get all Grafana inspections: %v", err)
 	}
 
 	level := 0
@@ -121,7 +121,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3))
 			}
 
-			if allGrafanaInspections[k.ClusterName] != nil {
+			if allGrafanaInspections != nil && allGrafanaInspections[k.ClusterName] != nil {
 				if len(allGrafanaInspections[k.ClusterName].ClusterCoreInspection) > 0 {
 					coreInspections = append(coreInspections, allGrafanaInspections[k.ClusterName].ClusterCoreInspection...)
 				}
