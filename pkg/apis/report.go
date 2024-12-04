@@ -64,6 +64,7 @@ type WorkloadData struct {
 	Namespace string  `json:"namespace"`
 	Pods      []*Pod  `json:"pods"`
 	Status    *Status `json:"status"`
+	Items     []*Item `json:"items"`
 }
 
 type Node struct {
@@ -71,6 +72,7 @@ type Node struct {
 	HostIP   string    `json:"host_ip"`
 	Resource *Resource `json:"resource"`
 	Commands *Command  `json:"commands"`
+	Items    []*Item   `json:"items"`
 }
 
 type Resource struct {
@@ -85,18 +87,24 @@ type Resource struct {
 }
 
 type Namespace struct {
-	Name               string `json:"name"`
-	EmptyResourceQuota bool   `json:"empty_resource_quota"`
-	EmptyResource      bool   `json:"empty_resource"`
-	PodCount           int    `json:"pod_count"`
-	ServiceCount       int    `json:"service_count"`
-	DeploymentCount    int    `json:"deployment_count"`
-	ReplicasetCount    int    `json:"replicaset_count"`
-	StatefulsetCount   int    `json:"statefulset_count"`
-	DaemonsetCount     int    `json:"daemonset_count"`
-	JobCount           int    `json:"job_count"`
-	SecretCount        int    `json:"secret_count"`
-	ConfigMapCount     int    `json:"config_map_count"`
+	Name             string  `json:"name"`
+	PodCount         int     `json:"pod_count"`
+	ServiceCount     int     `json:"service_count"`
+	DeploymentCount  int     `json:"deployment_count"`
+	ReplicasetCount  int     `json:"replicaset_count"`
+	StatefulsetCount int     `json:"statefulset_count"`
+	DaemonsetCount   int     `json:"daemonset_count"`
+	JobCount         int     `json:"job_count"`
+	SecretCount      int     `json:"secret_count"`
+	ConfigMapCount   int     `json:"config_map_count"`
+	Items            []*Item `json:"items"`
+}
+
+type Item struct {
+	Name    string `json:"name"`
+	Pass    bool   `json:"pass"`
+	Message string `json:"message"`
+	Level   int    `json:"level"`
 }
 
 type PersistentVolumeClaim struct {
@@ -105,15 +113,15 @@ type PersistentVolumeClaim struct {
 }
 
 type Service struct {
-	Name           string `json:"name"`
-	Namespace      string `json:"namespace"`
-	EmptyEndpoints bool   `json:"empty_endpoints"`
+	Name      string  `json:"name"`
+	Namespace string  `json:"namespace"`
+	Items     []*Item `json:"items"`
 }
 
 type Ingress struct {
-	Name          string `json:"name"`
-	Namespace     string `json:"namespace"`
-	DuplicatePath bool   `json:"duplicate_path"`
+	Name      string  `json:"name"`
+	Namespace string  `json:"namespace"`
+	Items     []*Item `json:"items"`
 }
 
 type Pod struct {
@@ -233,6 +241,15 @@ func NewInspections() []*Inspection {
 func NewInspection(title, message string, level int) *Inspection {
 	return &Inspection{
 		Title:   title,
+		Message: message,
+		Level:   level,
+	}
+}
+
+func NewItem(name, message string, pass bool, level int) *Item {
+	return &Item{
+		Name:    name,
+		Pass:    pass,
 		Message: message,
 		Level:   level,
 	}

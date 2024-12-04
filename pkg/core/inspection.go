@@ -47,6 +47,11 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 		logrus.Errorf("Failed to get all Grafana inspections: %v", err)
 	}
 
+	allGrafanaItems, err := GetAllGrafanaItems(task.Name)
+	if err != nil {
+		logrus.Errorf("Failed to get all Grafana items: %v", err)
+	}
+
 	level := 0
 	var sendMessageDetail []string
 	for _, k := range template.KubernetesConfig {
@@ -59,6 +64,11 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 			coreInspections := apis.NewInspections()
 			nodeInspections := apis.NewInspections()
 			resourceInspections := apis.NewInspections()
+
+			grafanaItems := NewGrafanaItem()
+			if allGrafanaItems != nil && allGrafanaItems[k.ClusterName] != nil {
+				grafanaItems = allGrafanaItems[k.ClusterName]
+			}
 
 			if ok {
 				sendMessageDetail = append(sendMessageDetail, fmt.Sprintf("集群 %s 巡检警告：", k.ClusterName))
@@ -76,7 +86,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				}
 				nodeInspections = append(nodeInspections, nodeInspectionArray...)
 
-				ResourceWorkloadArray, resourceInspectionArray, err := GetWorkloads(client, k.ClusterResourceConfig.WorkloadConfig, task.Name)
+				ResourceWorkloadArray, resourceInspectionArray, err := GetWorkloads(client, k.ClusterResourceConfig.WorkloadConfig, task.Name, grafanaItems.ClusterResourceItem)
 				if err != nil {
 					return task, inspectionFailed, fmt.Errorf("Failed to get workloads for cluster %s: %v\n", k.ClusterID, err)
 				}
@@ -93,7 +103,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				}
 
 				if k.ClusterResourceConfig.ServiceConfig.Enable {
-					ResourceServiceArray, resourceInspectionArray, err := GetServices(client, task.Name)
+					ResourceServiceArray, resourceInspectionArray, err := GetServices(client, task.Name, grafanaItems.ClusterResourceItem.ServiceItems)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get services for cluster %s: %v\n", k.ClusterID, err)
 					}
@@ -234,8 +244,13 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 			if err != nil {
 				return task, notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
 			}
+		} else if notify.AppID != "" && notify.AppSecret != "" && (notify.Mobiles != "" || notify.Emails != "") {
+			err = send.NotifyUser(notify.AppID, notify.AppSecret, notify.Mobiles, notify.Emails, sb.String())
+			if err != nil {
+				return task, notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
+			}
 		} else {
-			err = send.Notify(notify.AppID, notify.AppSecret, common.GetReportFileName(p.ReportTime), common.PrintPDFPath+common.GetReportFileName(p.ReportTime), sb.String(), task.Name)
+			err = send.NotifyChat(notify.AppID, notify.AppSecret, common.GetReportFileName(p.ReportTime), common.PrintPDFPath+common.GetReportFileName(p.ReportTime), sb.String(), task.Name)
 			if err != nil {
 				return task, notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
 			}

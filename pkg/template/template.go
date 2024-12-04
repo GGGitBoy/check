@@ -63,44 +63,59 @@ func Register() error {
 			return fmt.Errorf("Failed to detect provider for cluster %s: %v\n", clusterName, err)
 		}
 
-		workloadConfig := apis.NewWorkloadConfig()
-		workloadConfig = getWorkloadConfigByProvider(provider)
-		if c.GetName() == common.LocalCluster {
-			logrus.Infof("[Template] %s cluster add rancher check\n", c.GetName())
-			workloadConfig.Deployment = append(workloadConfig.Deployment, &apis.WorkloadDetailConfig{
-				Name:      "rancher",
-				Namespace: "cattle-system",
-				Regexp:    "\\[(ERROR|WARNING)\\].*",
-				Level:     3,
-			})
-		}
-
-		nodeList, err := kubernetesClient.Clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return fmt.Errorf("Failed to list nodes for cluster %s: %v\n", clusterName, err)
-		}
-
-		nodeConfigs := apis.NewNodeConfigs()
-		nodeConfigs, err = generateNodeConfigs(nodeList, provider)
-		if err != nil {
-			return fmt.Errorf("Failed to generate node configs for cluster %s: %v\n", clusterName, err)
-		}
-
 		clusterCoreConfig := apis.NewClusterCoreConfig()
 		clusterNodeConfig := apis.NewClusterNodeConfig()
 		clusterResourceConfig := apis.NewClusterResourceConfig()
 
-		clusterNodeConfig.NodeConfig = nodeConfigs
+		clusterNodeConfig.NodeConfig = []*apis.NodeConfig{
+			{
+				Enable:         true,
+				SelectorLabels: nil,
+				Commands:       generateWorkerCommands(provider),
+			},
+		}
+
 		clusterResourceConfig = &apis.ClusterResourceConfig{
-			WorkloadConfig: workloadConfig,
+			WorkloadConfig: &apis.WorkloadConfig{
+				Deployment: &apis.WorkloadDetailConfig{
+					Enable:            true,
+					SelectorNamespace: "",
+					SelectorLabels:    nil,
+				},
+				Statefulset: &apis.WorkloadDetailConfig{
+					Enable:            true,
+					SelectorNamespace: "",
+					SelectorLabels:    nil,
+				},
+				Daemonset: &apis.WorkloadDetailConfig{
+					Enable:            true,
+					SelectorNamespace: "",
+					SelectorLabels:    nil,
+				},
+				Job: &apis.WorkloadDetailConfig{
+					Enable:            true,
+					SelectorNamespace: "",
+					SelectorLabels:    nil,
+				},
+				Cronjob: &apis.WorkloadDetailConfig{
+					Enable:            true,
+					SelectorNamespace: "",
+					SelectorLabels:    nil,
+				},
+			},
 			NamespaceConfig: &apis.NamespaceConfig{
-				Enable: true,
+				Enable:         true,
+				SelectorLabels: nil,
 			},
 			ServiceConfig: &apis.ServiceConfig{
-				Enable: true,
+				Enable:            true,
+				SelectorNamespace: "",
+				SelectorLabels:    nil,
 			},
 			IngressConfig: &apis.IngressConfig{
-				Enable: true,
+				Enable:            true,
+				SelectorNamespace: "",
+				SelectorLabels:    nil,
 			},
 		}
 
@@ -139,50 +154,50 @@ func Register() error {
 }
 
 // 获取工作负载配置
-func getWorkloadConfigByProvider(provider string) *apis.WorkloadConfig {
-	switch provider {
-	case detectorProviders.RKE:
-		return NewRKE1WorkloadConfig()
-	case detectorProviders.RKE2:
-		return NewRKE2WorkloadConfig()
-	case detectorProviders.K3s:
-		return NewK3SWorkloadConfig()
-	default:
-		return &apis.WorkloadConfig{}
-	}
-}
+//func getWorkloadConfigByProvider(provider string) *apis.WorkloadConfig {
+//	switch provider {
+//	case detectorProviders.RKE:
+//		return NewRKE1WorkloadConfig()
+//	case detectorProviders.RKE2:
+//		return NewRKE2WorkloadConfig()
+//	case detectorProviders.K3s:
+//		return NewK3SWorkloadConfig()
+//	default:
+//		return &apis.WorkloadConfig{}
+//	}
+//}
 
 // 生成节点配置
-func generateNodeConfigs(nodeList *v1.NodeList, provider string) ([]*apis.NodeConfig, error) {
-	var nodeConfigs []*apis.NodeConfig
-	var workerNames, otherNodeNames []string
-
-	for _, n := range nodeList.Items {
-		if isWorkerNode(n) || isMasterNode(n) {
-			workerNames = append(workerNames, n.GetName())
-		} else {
-			otherNodeNames = append(otherNodeNames, n.GetName())
-		}
-	}
-
-	if len(workerNames) > 0 {
-		workerCommands := generateWorkerCommands(provider)
-		nodeConfigs = append(nodeConfigs, &apis.NodeConfig{
-			Names:    workerNames,
-			Commands: workerCommands,
-		})
-	}
-
-	if len(otherNodeNames) > 0 {
-		otherCommands := generateOtherCommands(provider)
-		nodeConfigs = append(nodeConfigs, &apis.NodeConfig{
-			Names:    otherNodeNames,
-			Commands: otherCommands,
-		})
-	}
-
-	return nodeConfigs, nil
-}
+//func generateNodeConfigs(nodeList *v1.NodeList, provider string) ([]*apis.NodeConfig, error) {
+//	var nodeConfigs []*apis.NodeConfig
+//	var workerNames, otherNodeNames []string
+//
+//	for _, n := range nodeList.Items {
+//		if isWorkerNode(n) || isMasterNode(n) {
+//			workerNames = append(workerNames, n.GetName())
+//		} else {
+//			otherNodeNames = append(otherNodeNames, n.GetName())
+//		}
+//	}
+//
+//	if len(workerNames) > 0 {
+//		workerCommands := generateWorkerCommands(provider)
+//		nodeConfigs = append(nodeConfigs, &apis.NodeConfig{
+//			Names:    workerNames,
+//			Commands: workerCommands,
+//		})
+//	}
+//
+//	if len(otherNodeNames) > 0 {
+//		otherCommands := generateOtherCommands(provider)
+//		nodeConfigs = append(nodeConfigs, &apis.NodeConfig{
+//			Names:    otherNodeNames,
+//			Commands: otherCommands,
+//		})
+//	}
+//
+//	return nodeConfigs, nil
+//}
 
 // 生成工作节点命令
 func generateWorkerCommands(provider string) []*apis.CommandConfig {
@@ -243,144 +258,4 @@ func isWorkerNode(node v1.Node) bool {
 func isMasterNode(node v1.Node) bool {
 	isMaster, ok := node.Labels["node-role.kubernetes.io/master"]
 	return ok && isMaster == "true"
-}
-
-func NewRKE1WorkloadConfig() *apis.WorkloadConfig {
-	return &apis.WorkloadConfig{
-		Deployment: []*apis.WorkloadDetailConfig{
-			{
-				Name:      "cattle-cluster-agent",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "rancher-webhook",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "calico-kube-controllers",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "coredns",
-				Namespace: "kube-system",
-				Regexp:    "",
-			},
-			{
-				Name:      "coredns-autoscaler",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "metrics-server",
-				Namespace: "kube-system",
-			},
-		},
-		Daemonset: []*apis.WorkloadDetailConfig{
-			{
-				Name:      "inspection-agent",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "kube-api-auth",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "cattle-node-agent",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "nginx-ingress-controller",
-				Namespace: "ingress-nginx",
-			},
-			{
-				Name:      "canal",
-				Namespace: "kube-system",
-			},
-		},
-	}
-}
-
-func NewRKE2WorkloadConfig() *apis.WorkloadConfig {
-	return &apis.WorkloadConfig{
-		Deployment: []*apis.WorkloadDetailConfig{
-			{
-				Name:      "cattle-cluster-agent",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "rancher-webhook",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "system-upgrade-controller",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "rke2-coredns-rke2-coredns",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "rke2-coredns-rke2-coredns-autoscaler",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "rke2-metrics-server",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "rke2-snapshot-controller",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "rke2-snapshot-validation-webhook",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "calico-kube-controllers",
-				Namespace: "calico-system",
-			},
-			{
-				Name:      "calico-typha",
-				Namespace: "calico-system",
-			},
-		},
-		Daemonset: []*apis.WorkloadDetailConfig{
-			{
-				Name:      "inspection-agent",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "rke2-ingress-nginx-controller",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "calico-node",
-				Namespace: "calico-system",
-			},
-		},
-	}
-}
-
-func NewK3SWorkloadConfig() *apis.WorkloadConfig {
-	return &apis.WorkloadConfig{
-		Deployment: []*apis.WorkloadDetailConfig{
-			{
-				Name:      "cattle-cluster-agent",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "rancher-webhook",
-				Namespace: "cattle-system",
-			},
-			{
-				Name:      "coredns",
-				Namespace: "kube-system",
-			},
-		},
-		Daemonset: []*apis.WorkloadDetailConfig{
-			{
-				Name:      "inspection-agent",
-				Namespace: "cattle-system",
-			},
-		},
-	}
 }

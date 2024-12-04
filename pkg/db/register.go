@@ -45,7 +45,9 @@ var (
             app_id TEXT,
             app_secret TEXT,
             webhook_url TEXT,
-			secret TEXT
+			secret TEXT,
+			mobiles TEXT,
+			emails TEXT
         );`,
 	}
 

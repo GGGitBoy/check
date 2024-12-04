@@ -40,6 +40,7 @@ func Start() http.Handler {
 
 	router.Methods(http.MethodGet).Path("/v1/clusters/list").Handler(logMiddleware(api.GetClusters()))
 	router.Methods(http.MethodGet).Path("/v1/clusters/{id}/resource/list").Handler(logMiddleware(api.GetResource()))
+	router.Methods(http.MethodGet).Path("/v1/clusters/{id}/namespaces/list").Handler(logMiddleware(api.GetNamespaces()))
 
 	router.Methods(http.MethodGet).Path("/v1/agent/list").Handler(logMiddleware(api.ListAgent()))
 	router.Methods(http.MethodDelete).Path("/v1/agent/delete/{id}").Handler(logMiddleware(api.DeleteAgent()))

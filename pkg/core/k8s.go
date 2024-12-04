@@ -17,7 +17,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
-	"k8s.io/utils/strings/slices"
 	"os"
 	"regexp"
 	"strings"
@@ -25,9 +24,6 @@ import (
 )
 
 var (
-	warning = "warning"
-	success = "success"
-
 	Commands = []*apis.CommandConfig{
 		{
 			Description: "API Server Ready Check",
@@ -112,114 +108,203 @@ func getCommandCheckResult(r apis.CommandCheckResult) *apis.CommandCheckResult {
 	}
 }
 
+type NodeTemplate struct {
+	NodeTemplateConfig []NodeTemplateConfig `json:"node_template_config"`
+}
+
+type NodeTemplateConfig struct {
+	Nodes map[string][]*apis.CommandConfig `json:"nodes"`
+}
+
 func GetNodes(client *apis.Client, nodesConfig []*apis.NodeConfig, taskName string) ([]*apis.Node, []*apis.Inspection, error) {
 	logrus.Infof("[%s] Starting node inspection", taskName)
 	nodeNodeArray := apis.NewNodes()
 	nodeInspections := apis.NewInspections()
 
-	set := labels.Set(map[string]string{"name": "inspection-agent"})
-	podList, err := client.Clientset.CoreV1().Pods(common.InspectionNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.String()})
+	var nodeTemplate NodeTemplate
+	for _, n := range nodesConfig {
+		var set labels.Set
+		if n.SelectorLabels != nil {
+			set = n.SelectorLabels
+		}
+
+		nodeList, err := client.Clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
+		if err != nil {
+			return nil, nil, fmt.Errorf("Failed to list nodes : %v\n", err)
+		}
+
+		nodes := make(map[string][]*apis.CommandConfig)
+		for _, i := range nodeList.Items {
+			nodes[i.Name] = n.Commands
+		}
+
+		nodeTemplate.NodeTemplateConfig = append(nodeTemplate.NodeTemplateConfig, NodeTemplateConfig{
+			Nodes: nodes,
+		})
+	}
+
+	podSet := labels.Set(map[string]string{"name": "inspection-agent"})
+	podList, err := client.Clientset.CoreV1().Pods(common.InspectionNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: podSet.String()})
 	if err != nil {
 		return nil, nil, fmt.Errorf("Error listing pods in namespace %s: %v\n", common.InspectionNamespace, err)
 	}
 
 	for _, pod := range podList.Items {
-		for _, n := range nodesConfig {
-			if slices.Contains(n.Names, pod.Spec.NodeName) {
-				node, err := client.Clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
-				if err != nil {
-					return nil, nil, fmt.Errorf("Error getting node %s: %v\n", pod.Spec.NodeName, err)
-				}
+		node, err := client.Clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
+		if err != nil {
+			return nil, nil, fmt.Errorf("Error getting node %s: %v\n", pod.Spec.NodeName, err)
+		}
 
-				podLimits := getResourceList(node.Annotations["management.cattle.io/pod-limits"])
-				podRequests := getResourceList(node.Annotations["management.cattle.io/pod-requests"])
+		podLimits := getResourceList(node.Annotations["management.cattle.io/pod-limits"])
+		podRequests := getResourceList(node.Annotations["management.cattle.io/pod-requests"])
 
-				limitsCPU := podLimits.Cpu().Value()
-				limitsMemory := podLimits.Memory().Value()
-				requestsCPU := podRequests.Cpu().Value()
-				requestsMemory := podRequests.Memory().Value()
-				requestsPods := podRequests.Pods().Value()
-				allocatableCPU, _ := node.Status.Allocatable.Cpu().AsInt64()
-				allocatableMemory, _ := node.Status.Allocatable.Memory().AsInt64()
-				allocatablePods, _ := node.Status.Allocatable.Pods().AsInt64()
+		limitsCPU := podLimits.Cpu().Value()
+		limitsMemory := podLimits.Memory().Value()
+		requestsCPU := podRequests.Cpu().Value()
+		requestsMemory := podRequests.Memory().Value()
+		requestsPods := podRequests.Pods().Value()
+		allocatableCPU, _ := node.Status.Allocatable.Cpu().AsInt64()
+		allocatableMemory, _ := node.Status.Allocatable.Memory().AsInt64()
+		allocatablePods, _ := node.Status.Allocatable.Pods().AsInt64()
 
-				if float64(limitsCPU)/float64(allocatableCPU) > 0.8 {
-					nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Limits CPU", pod.Spec.NodeName), fmt.Sprintf("节点 %s limits CPU 超过百分之 80", pod.Spec.NodeName), 2))
-					logrus.Infof("[%s] Node %s High Limits CPU: limits CPU %d, allocatable CPU %d", taskName, pod.Spec.NodeName, limitsCPU, allocatableCPU)
-				}
+		highLimitsCPU := true
+		highLimitsCPUMessage := ""
+		if float64(limitsCPU)/float64(allocatableCPU) > 0.8 {
+			highLimitsCPU = false
+			highLimitsCPUMessage = fmt.Sprintf("节点 %s limits CPU 超过百分之 80", pod.Spec.NodeName)
+			nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Limits CPU", pod.Spec.NodeName), fmt.Sprintf("节点 %s limits CPU 超过百分之 80", pod.Spec.NodeName), 2))
+			logrus.Infof("[%s] Node %s High Limits CPU: limits CPU %d, allocatable CPU %d", taskName, pod.Spec.NodeName, limitsCPU, allocatableCPU)
+		}
 
-				if float64(limitsMemory)/float64(allocatableMemory) > 0.8 {
-					nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Limits Memory", pod.Spec.NodeName), fmt.Sprintf("节点 %s limits Memory 超过百分之 80", pod.Spec.NodeName), 2))
-					logrus.Infof("[%s] Node %s High Limits Memory: limits Memory %d, allocatable Memory %d", taskName, pod.Spec.NodeName, limitsMemory, allocatableMemory)
-				}
+		highLimitsMemory := true
+		highLimitsMemoryMessage := ""
+		if float64(limitsMemory)/float64(allocatableMemory) > 0.8 {
+			highLimitsMemory = false
+			highLimitsMemoryMessage = fmt.Sprintf("节点 %s limits Memory 超过百分之 80", pod.Spec.NodeName)
+			nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Limits Memory", pod.Spec.NodeName), fmt.Sprintf("节点 %s limits Memory 超过百分之 80", pod.Spec.NodeName), 2))
+			logrus.Infof("[%s] Node %s High Limits Memory: limits Memory %d, allocatable Memory %d", taskName, pod.Spec.NodeName, limitsMemory, allocatableMemory)
+		}
 
-				if float64(requestsCPU)/float64(allocatableCPU) > 0.8 {
-					nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests CPU", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests CPU 超过百分之 80", pod.Spec.NodeName), 2))
-					logrus.Infof("[%s] Node %s High Requests CPU: requests CPU %d, allocatable CPU %d", taskName, pod.Spec.NodeName, requestsCPU, allocatableCPU)
-				}
+		highRequestsCPU := true
+		highRequestsCPUMessage := ""
+		if float64(requestsCPU)/float64(allocatableCPU) > 0.8 {
+			highRequestsCPU = false
+			highRequestsCPUMessage = fmt.Sprintf("节点 %s requests CPU 超过百分之 80", pod.Spec.NodeName)
+			nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests CPU", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests CPU 超过百分之 80", pod.Spec.NodeName), 2))
+			logrus.Infof("[%s] Node %s High Requests CPU: requests CPU %d, allocatable CPU %d", taskName, pod.Spec.NodeName, requestsCPU, allocatableCPU)
+		}
 
-				if float64(requestsMemory)/float64(allocatableMemory) > 0.8 {
-					nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests Memory", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests Memory 超过百分之 80", pod.Spec.NodeName), 2))
-					logrus.Infof("[%s] Node %s High Requests Memory: requests Memory %d, allocatable Memory %d", taskName, pod.Spec.NodeName, requestsMemory, allocatableMemory)
-				}
+		highRequestsMemory := true
+		highRequestsMemoryMessage := ""
+		if float64(requestsMemory)/float64(allocatableMemory) > 0.8 {
+			highRequestsMemory = false
+			highRequestsMemoryMessage = fmt.Sprintf("节点 %s requests Memory 超过百分之 80", pod.Spec.NodeName)
+			nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests Memory", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests Memory 超过百分之 80", pod.Spec.NodeName), 2))
+			logrus.Infof("[%s] Node %s High Requests Memory: requests Memory %d, allocatable Memory %d", taskName, pod.Spec.NodeName, requestsMemory, allocatableMemory)
+		}
 
-				if float64(requestsPods)/float64(allocatablePods) > 0.8 {
-					nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests Pods", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests Pods 超过百分之 80", pod.Spec.NodeName), 2))
-					logrus.Infof("[%s] Node %s High Requests Pods: requests Pods %d, allocatable Pods %d", taskName, pod.Spec.NodeName, requestsPods, allocatablePods)
-				}
+		highRequestsPods := true
+		highRequestsPodsMessage := ""
+		if float64(requestsPods)/float64(allocatablePods) > 0.8 {
+			highRequestsPods = false
+			highRequestsPodsMessage = fmt.Sprintf("节点 %s requests Pods 超过百分之 80", pod.Spec.NodeName)
+			nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests Pods", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests Pods 超过百分之 80", pod.Spec.NodeName), 2))
+			logrus.Infof("[%s] Node %s High Requests Pods: requests Pods %d, allocatable Pods %d", taskName, pod.Spec.NodeName, requestsPods, allocatablePods)
+		}
 
-				var commands []string
-				for _, c := range n.Commands {
+		var commands []string
+		for _, n := range nodeTemplate.NodeTemplateConfig {
+			cs, ok := n.Nodes[pod.Spec.NodeName]
+			if ok {
+				for _, c := range cs {
 					commands = append(commands, c.Description+": "+c.Command)
 				}
-
-				logrus.Debugf("Commands to execute on node %s: %v", pod.Spec.NodeName, commands)
-				command := "/opt/inspection/inspection.sh"
-				stdout, stderr, err := ExecToPodThroughAPI(client.Clientset, client.Config, command, commands, pod.Namespace, pod.Name, "inspection-agent-container", taskName)
-				if err != nil {
-					return nil, nil, fmt.Errorf("Error executing command in pod %s: %v\n", pod.Name, err)
-				}
-
-				if stderr != "" {
-					logrus.Errorf("Stderr from pod %s: %s", pod.Name, stderr)
-				}
-
-				var results []apis.CommandCheckResult
-				err = json.Unmarshal([]byte(stdout), &results)
-				if err != nil {
-
-					return nil, nil, fmt.Errorf("Error unmarshalling stdout for pod %s: %v\n", pod.Name, err)
-				}
-
-				for _, r := range results {
-					if r.Error != "" {
-						nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s (%s)", pod.Spec.NodeName, r.Description), fmt.Sprintf("%s", r.Error), 2))
-						logrus.Errorf("Node %s inspection failed (%s): %s", pod.Spec.NodeName, r.Description, r.Error)
-					}
-				}
-
-				nodeData := &apis.Node{
-					Name:   pod.Spec.NodeName,
-					HostIP: pod.Status.HostIP,
-					Resource: &apis.Resource{
-						LimitsCPU:         limitsCPU,
-						LimitsMemory:      limitsMemory,
-						RequestsCPU:       requestsCPU,
-						RequestsMemory:    requestsMemory,
-						RequestsPods:      requestsPods,
-						AllocatableCPU:    allocatableCPU,
-						AllocatableMemory: allocatableMemory,
-						AllocatablePods:   allocatablePods,
-					},
-					Commands: &apis.Command{
-						Stdout: results,
-						Stderr: stderr,
-					},
-				}
-
-				nodeNodeArray = append(nodeNodeArray, nodeData)
 			}
 		}
+
+		logrus.Debugf("Commands to execute on node %s: %v", pod.Spec.NodeName, commands)
+		command := "/opt/inspection/inspection.sh"
+		stdout, stderr, err := ExecToPodThroughAPI(client.Clientset, client.Config, command, commands, pod.Namespace, pod.Name, "inspection-agent-container", taskName)
+		if err != nil {
+			return nil, nil, fmt.Errorf("Error executing command in pod %s: %v\n", pod.Name, err)
+		}
+
+		if stderr != "" {
+			logrus.Errorf("Stderr from pod %s: %s", pod.Name, stderr)
+		}
+
+		var results []apis.CommandCheckResult
+		err = json.Unmarshal([]byte(stdout), &results)
+		if err != nil {
+			return nil, nil, fmt.Errorf("Error unmarshalling stdout for pod %s: %v\n", pod.Name, err)
+		}
+
+		var commandItems []*apis.Item
+		for _, r := range results {
+			commandCheck := true
+			commandCheckMessage := ""
+			if r.Error != "" {
+				commandCheck = false
+				commandCheckMessage = fmt.Sprintf("%s", r.Error)
+				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s (%s)", pod.Spec.NodeName, r.Description), fmt.Sprintf("%s", r.Error), 2))
+				logrus.Errorf("Node %s inspection failed (%s): %s", pod.Spec.NodeName, r.Description, r.Error)
+			}
+
+			commandItems = append(commandItems, &apis.Item{
+				Name:    r.Description,
+				Message: commandCheckMessage,
+				Pass:    commandCheck,
+			})
+		}
+
+		nodeData := &apis.Node{
+			Name:   pod.Spec.NodeName,
+			HostIP: pod.Status.HostIP,
+			Resource: &apis.Resource{
+				LimitsCPU:         limitsCPU,
+				LimitsMemory:      limitsMemory,
+				RequestsCPU:       requestsCPU,
+				RequestsMemory:    requestsMemory,
+				RequestsPods:      requestsPods,
+				AllocatableCPU:    allocatableCPU,
+				AllocatableMemory: allocatableMemory,
+				AllocatablePods:   allocatablePods,
+			},
+			Commands: &apis.Command{
+				Stdout: results,
+				Stderr: stderr,
+			},
+			Items: []*apis.Item{
+				{
+					Name:    "Limits CPU 超过 80 %",
+					Message: highLimitsCPUMessage,
+					Pass:    highLimitsCPU,
+				},
+				{
+					Name:    "Limits Memory 超过 80 %",
+					Message: highLimitsMemoryMessage,
+					Pass:    highLimitsMemory,
+				},
+				{
+					Name:    "Requests CPU 超过 80 %",
+					Message: highRequestsCPUMessage,
+					Pass:    highRequestsCPU,
+				},
+				{
+					Name:    "Requests Memory 超过 80 %",
+					Message: highRequestsMemoryMessage,
+					Pass:    highRequestsMemory,
+				},
+				{
+					Name:    "Requests Pods 超过 80 %",
+					Message: highRequestsPodsMessage,
+					Pass:    highRequestsPods,
+				},
+			},
+		}
+
+		nodeData.Items = append(nodeData.Items, commandItems...)
+		nodeNodeArray = append(nodeNodeArray, nodeData)
 	}
 
 	return nodeNodeArray, nodeInspections, nil
@@ -277,197 +362,261 @@ func (w *outputWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, taskName string) (*apis.Workload, []*apis.Inspection, error) {
+func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, taskName string, clusterResourceItem *ClusterResourceItem) (*apis.Workload, []*apis.Inspection, error) {
 	logrus.Infof("[%s] Starting workload inspection", taskName)
 
 	ResourceWorkloadArray := apis.NewWorkload()
 	resourceInspections := apis.NewInspections()
 
-	for _, deploy := range workloadConfig.Deployment {
-		logrus.Debugf("[%s] Inspecting Deployment: %s in namespace %s", taskName, deploy.Name, deploy.Namespace)
-		deployment, err := client.Clientset.AppsV1().Deployments(deploy.Namespace).Get(context.TODO(), deploy.Name, metav1.GetOptions{})
+	if workloadConfig.Deployment.Enable {
+		var set labels.Set
+		if workloadConfig.Deployment.SelectorLabels != nil {
+			set = workloadConfig.Deployment.SelectorLabels
+		}
+
+		deployments, err := client.Clientset.AppsV1().Deployments(workloadConfig.Deployment.SelectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logrus.Warnf("Deployment %s not found in namespace %s", deploy.Name, deploy.Namespace)
-				continue
+			return nil, nil, fmt.Errorf("Error list Deployment: %v\n", err)
+		}
+
+		for _, deploy := range deployments.Items {
+			logrus.Debugf("[%s] Inspecting Deployment: %s in namespace %s", taskName, deploy.Name, deploy.Namespace)
+
+			deployHealth := true
+			deployHealthMessage := ""
+			if !isDeploymentAvailable(&deploy) {
+				deployHealth = false
+				deployHealthMessage = fmt.Sprintf("命名空间 %s 下的 Deployment %s 处于非健康状态", deploy.Namespace, deploy.Name)
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Deployment %s 警告", deploy.Name), fmt.Sprintf("命名空间 %s 下的 Deployment %s 处于非健康状态", deploy.Namespace, deploy.Name), defaultLevel(1)))
 			}
-			return nil, nil, fmt.Errorf("Error getting Deployment %s in namespace %s: %v\n", deploy.Name, deploy.Namespace, err)
-		}
 
-		deployState := warning
-		if isDeploymentAvailable(deployment) {
-			deployState = success
-		}
+			var condition []apis.Condition
+			for _, c := range deploy.Status.Conditions {
+				condition = append(condition, apis.Condition{
+					Type:   string(c.Type),
+					Status: string(c.Status),
+					Reason: c.Reason,
+				})
+			}
 
-		var condition []apis.Condition
-		for _, c := range deployment.Status.Conditions {
-			condition = append(condition, apis.Condition{
-				Type:   string(c.Type),
-				Status: string(c.Status),
-				Reason: c.Reason,
+			podset := labels.Set(deploy.Spec.Selector.MatchLabels)
+			pods, err := GetPod("", deploy.Namespace, podset, client.Clientset, taskName)
+			if err != nil {
+				return nil, nil, fmt.Errorf("Error getting pods for Deployment %s in namespace %s: %v\n", deploy.Name, deploy.Namespace, err)
+			}
+
+			var items []*apis.Item
+			items = append(items, &apis.Item{
+				Name:    "健康状态",
+				Message: deployHealthMessage,
+				Pass:    deployHealth,
 			})
-		}
 
-		set := labels.Set(deployment.Spec.Selector.MatchLabels)
-		pods, err := GetPod(deploy.Regexp, deployment.Namespace, set, client.Clientset, taskName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error getting pods for Deployment %s in namespace %s: %v\n", deploy.Name, deploy.Namespace, err)
-		}
+			grafanaItem, ok := clusterResourceItem.DeploymentItem[deploy.Namespace+"/"+deploy.Name]
+			if ok {
+				items = append(items, grafanaItem...)
+			}
 
-		deploymentData := &apis.WorkloadData{
-			Name:      deployment.Name,
-			Namespace: deployment.Namespace,
-			Pods:      pods,
-			Status: &apis.Status{
-				State:     deployState,
-				Condition: condition,
-			},
-		}
+			deploymentData := &apis.WorkloadData{
+				Name:      deploy.Name,
+				Namespace: deploy.Namespace,
+				Pods:      pods,
+				Status: &apis.Status{
+					Condition: condition,
+				},
+				Items: items,
+			}
 
-		ResourceWorkloadArray.Deployment = append(ResourceWorkloadArray.Deployment, deploymentData)
-		if deployState == warning {
-			resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Deployment %s 警告", deploymentData.Name), fmt.Sprintf("命名空间 %s 下的 Deployment %s 处于非健康状态", deploymentData.Namespace, deploymentData.Name), defaultLevel(deploy.Level)))
+			ResourceWorkloadArray.Deployment = append(ResourceWorkloadArray.Deployment, deploymentData)
 		}
 	}
 
-	for _, ds := range workloadConfig.Daemonset {
-		logrus.Debugf("[%s] Inspecting DaemonSet: %s in namespace %s", taskName, ds.Name, ds.Namespace)
-		daemonSet, err := client.Clientset.AppsV1().DaemonSets(ds.Namespace).Get(context.TODO(), ds.Name, metav1.GetOptions{})
+	if workloadConfig.Daemonset.Enable {
+		var set labels.Set
+		if workloadConfig.Daemonset.SelectorLabels != nil {
+			set = workloadConfig.Daemonset.SelectorLabels
+		}
+
+		daemonSets, err := client.Clientset.AppsV1().DaemonSets(workloadConfig.Daemonset.SelectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logrus.Warnf("DaemonSet %s not found in namespace %s", ds.Name, ds.Namespace)
-				continue
+			return nil, nil, fmt.Errorf("Error list Deployment: %v\n", err)
+		}
+
+		for _, ds := range daemonSets.Items {
+			logrus.Debugf("[%s] Inspecting DaemonSet: %s in namespace %s", taskName, ds.Name, ds.Namespace)
+
+			dsHealth := true
+			dsHealthMessage := ""
+			if !isDaemonSetAvailable(&ds) {
+				dsHealth = false
+				dsHealthMessage = fmt.Sprintf("命名空间 %s 下的 DaemonSet %s 处于非健康状态", ds.Namespace, ds.Name)
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("DaemonSet %s 警告", ds.Name), fmt.Sprintf("命名空间 %s 下的 DaemonSet %s 处于非健康状态", ds.Namespace, ds.Name), defaultLevel(1)))
 			}
-			return nil, nil, fmt.Errorf("Error getting DaemonSet %s in namespace %s: %v\n", ds.Name, ds.Namespace, err)
-		}
 
-		dsState := warning
-		if isDaemonSetAvailable(daemonSet) {
-			dsState = success
-		}
+			var condition []apis.Condition
+			for _, c := range ds.Status.Conditions {
+				condition = append(condition, apis.Condition{
+					Type:   string(c.Type),
+					Status: string(c.Status),
+					Reason: c.Reason,
+				})
+			}
 
-		var condition []apis.Condition
-		for _, c := range daemonSet.Status.Conditions {
-			condition = append(condition, apis.Condition{
-				Type:   string(c.Type),
-				Status: string(c.Status),
-				Reason: c.Reason,
+			podset := labels.Set(ds.Spec.Selector.MatchLabels)
+			pods, err := GetPod("", ds.Namespace, podset, client.Clientset, taskName)
+			if err != nil {
+				return nil, nil, fmt.Errorf("Error getting pods for DaemonSet %s in namespace %s: %v\n", ds.Name, ds.Namespace, err)
+			}
+
+			var items []*apis.Item
+			items = append(items, &apis.Item{
+				Name:    "健康状态",
+				Message: dsHealthMessage,
+				Pass:    dsHealth,
 			})
-		}
 
-		set := labels.Set(daemonSet.Spec.Selector.MatchLabels)
-		pods, err := GetPod(ds.Regexp, daemonSet.Namespace, set, client.Clientset, taskName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error getting pods for DaemonSet %s in namespace %s: %v\n", ds.Name, ds.Namespace, err)
-		}
+			grafanaItem, ok := clusterResourceItem.DaemonsetItem[ds.Namespace+"/"+ds.Name]
+			if ok {
+				items = append(items, grafanaItem...)
+			}
 
-		daemonSetData := &apis.WorkloadData{
-			Name:      daemonSet.Name,
-			Namespace: daemonSet.Namespace,
-			Pods:      pods,
-			Status: &apis.Status{
-				State:     dsState,
-				Condition: condition,
-			},
-		}
+			daemonsetData := &apis.WorkloadData{
+				Name:      ds.Name,
+				Namespace: ds.Namespace,
+				Pods:      pods,
+				Status: &apis.Status{
+					Condition: condition,
+				},
+				Items: items,
+			}
 
-		ResourceWorkloadArray.Daemonset = append(ResourceWorkloadArray.Daemonset, daemonSetData)
-		if dsState == warning {
-			resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Daemonset %s 警告", daemonSetData.Name), fmt.Sprintf("命名空间 %s 下的 Daemonset %s 处于非健康状态", daemonSetData.Namespace, daemonSetData.Name), defaultLevel(ds.Level)))
+			ResourceWorkloadArray.Daemonset = append(ResourceWorkloadArray.Daemonset, daemonsetData)
 		}
 	}
 
-	for _, sts := range workloadConfig.Statefulset {
-		logrus.Debugf("[%s] Inspecting StatefulSet: %s in namespace %s", taskName, sts.Name, sts.Namespace)
-		statefulset, err := client.Clientset.AppsV1().StatefulSets(sts.Namespace).Get(context.TODO(), sts.Name, metav1.GetOptions{})
+	if workloadConfig.Statefulset.Enable {
+		var set labels.Set
+		if workloadConfig.Statefulset.SelectorLabels != nil {
+			set = workloadConfig.Statefulset.SelectorLabels
+		}
+
+		statefulsets, err := client.Clientset.AppsV1().StatefulSets(workloadConfig.Statefulset.SelectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logrus.Warnf("StatefulSet %s not found in namespace %s", sts.Name, sts.Namespace)
-				continue
+			return nil, nil, fmt.Errorf("Error list Deployment: %v\n", err)
+		}
+
+		for _, sts := range statefulsets.Items {
+			logrus.Debugf("[%s] Inspecting Statefulset: %s in namespace %s", taskName, sts.Name, sts.Namespace)
+
+			stsHealth := true
+			stsHealthMessage := ""
+			if !isStatefulSetAvailable(&sts) {
+				stsHealth = false
+				stsHealthMessage = fmt.Sprintf("命名空间 %s 下的 Statefulset %s 处于非健康状态", sts.Namespace, sts.Name)
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Statefulset %s 警告", sts.Name), fmt.Sprintf("命名空间 %s 下的 Statefulset %s 处于非健康状态", sts.Namespace, sts.Name), defaultLevel(1)))
 			}
-			return nil, nil, fmt.Errorf("Error getting StatefulSet %s in namespace %s: %v\n", sts.Name, sts.Namespace, err)
-		}
 
-		stsState := warning
-		if isStatefulSetAvailable(statefulset) {
-			stsState = success
-		}
+			var condition []apis.Condition
+			for _, c := range sts.Status.Conditions {
+				condition = append(condition, apis.Condition{
+					Type:   string(c.Type),
+					Status: string(c.Status),
+					Reason: c.Reason,
+				})
+			}
 
-		var condition []apis.Condition
-		for _, c := range statefulset.Status.Conditions {
-			condition = append(condition, apis.Condition{
-				Type:   string(c.Type),
-				Status: string(c.Status),
-				Reason: c.Reason,
+			podset := labels.Set(sts.Spec.Selector.MatchLabels)
+			pods, err := GetPod("", sts.Namespace, podset, client.Clientset, taskName)
+			if err != nil {
+				return nil, nil, fmt.Errorf("Error getting pods for Statefulset %s in namespace %s: %v\n", sts.Name, sts.Namespace, err)
+			}
+
+			var items []*apis.Item
+			items = append(items, &apis.Item{
+				Name:    "健康状态",
+				Message: stsHealthMessage,
+				Pass:    stsHealth,
 			})
-		}
 
-		set := labels.Set(statefulset.Spec.Selector.MatchLabels)
-		pods, err := GetPod(sts.Regexp, statefulset.Namespace, set, client.Clientset, taskName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error getting pods for StatefulSet %s in namespace %s: %v\n", sts.Name, sts.Namespace, err)
-		}
+			grafanaItem, ok := clusterResourceItem.StatefulsetItem[sts.Namespace+"/"+sts.Name]
+			if ok {
+				items = append(items, grafanaItem...)
+			}
 
-		statefulSetData := &apis.WorkloadData{
-			Name:      statefulset.Name,
-			Namespace: statefulset.Namespace,
-			Pods:      pods,
-			Status: &apis.Status{
-				State:     stsState,
-				Condition: condition,
-			},
-		}
+			statefulsetData := &apis.WorkloadData{
+				Name:      sts.Name,
+				Namespace: sts.Namespace,
+				Pods:      pods,
+				Status: &apis.Status{
+					Condition: condition,
+				},
+				Items: items,
+			}
 
-		ResourceWorkloadArray.Statefulset = append(ResourceWorkloadArray.Statefulset, statefulSetData)
-		if stsState == warning {
-			resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Statefulset %s 警告", statefulSetData.Name), fmt.Sprintf("命名空间 %s 下的 Statefulset %s 处于非健康状态", statefulSetData.Namespace, statefulSetData.Name), defaultLevel(sts.Level)))
+			ResourceWorkloadArray.Statefulset = append(ResourceWorkloadArray.Statefulset, statefulsetData)
 		}
 	}
 
-	for _, j := range workloadConfig.Job {
-		logrus.Debugf("[%s] Inspecting Job: %s in namespace %s", taskName, j.Name, j.Namespace)
-		job, err := client.Clientset.BatchV1().Jobs(j.Namespace).Get(context.TODO(), j.Name, metav1.GetOptions{})
+	if workloadConfig.Job.Enable {
+		var set labels.Set
+		if workloadConfig.Statefulset.SelectorLabels != nil {
+			set = workloadConfig.Statefulset.SelectorLabels
+		}
+
+		jobs, err := client.Clientset.BatchV1().Jobs(workloadConfig.Job.SelectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				logrus.Warnf("Job %s not found in namespace %s", j.Name, j.Namespace)
-				continue
+			return nil, nil, fmt.Errorf("Error list Job: %v\n", err)
+		}
+
+		for _, j := range jobs.Items {
+			logrus.Debugf("[%s] Inspecting Job: %s in namespace %s", taskName, j.Name, j.Namespace)
+
+			jHealth := true
+			jHealthMessage := ""
+			if !isJobCompleted(&j) {
+				jHealth = false
+				jHealthMessage = fmt.Sprintf("命名空间 %s 下的 Job %s 处于非健康状态", j.Namespace, j.Name)
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Job %s 警告", j.Name), fmt.Sprintf("命名空间 %s 下的 Job %s 处于非健康状态", j.Namespace, j.Name), defaultLevel(1)))
 			}
-			return nil, nil, fmt.Errorf("Error getting Job %s in namespace %s: %v\n", j.Name, j.Namespace, err)
-		}
 
-		jState := warning
-		if isJobCompleted(job) {
-			jState = success
-		}
+			var condition []apis.Condition
+			for _, c := range j.Status.Conditions {
+				condition = append(condition, apis.Condition{
+					Type:   string(c.Type),
+					Status: string(c.Status),
+					Reason: c.Reason,
+				})
+			}
 
-		var condition []apis.Condition
-		for _, c := range job.Status.Conditions {
-			condition = append(condition, apis.Condition{
-				Type:   string(c.Type),
-				Status: string(c.Status),
-				Reason: c.Reason,
+			podset := labels.Set(j.Spec.Selector.MatchLabels)
+			pods, err := GetPod("", j.Namespace, podset, client.Clientset, taskName)
+			if err != nil {
+				return nil, nil, fmt.Errorf("Error getting pods for Job %s in namespace %s: %v\n", j.Name, j.Namespace, err)
+			}
+
+			var items []*apis.Item
+			items = append(items, &apis.Item{
+				Name:    "健康状态",
+				Message: jHealthMessage,
+				Pass:    jHealth,
 			})
-		}
 
-		set := labels.Set(job.Spec.Selector.MatchLabels)
-		pods, err := GetPod(j.Regexp, j.Namespace, set, client.Clientset, taskName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error getting pods for Job %s in namespace %s: %v\n", j.Name, j.Namespace, err)
-		}
+			grafanaItem, ok := clusterResourceItem.JobItem[j.Namespace+"/"+j.Name]
+			if ok {
+				items = append(items, grafanaItem...)
+			}
 
-		jobData := &apis.WorkloadData{
-			Name:      job.Name,
-			Namespace: job.Namespace,
-			Pods:      pods,
-			Status: &apis.Status{
-				State:     jState,
-				Condition: condition,
-			},
-		}
+			jobData := &apis.WorkloadData{
+				Name:      j.Name,
+				Namespace: j.Namespace,
+				Pods:      pods,
+				Status: &apis.Status{
+					Condition: condition,
+				},
+				Items: items,
+			}
 
-		ResourceWorkloadArray.Job = append(ResourceWorkloadArray.Job, jobData)
-		if jState == warning {
-			resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Job %s 警告", jobData.Name), fmt.Sprintf("命名空间 %s 下的 Job %s 处于非健康状态", jobData.Namespace, jobData.Name), defaultLevel(j.Level)))
+			ResourceWorkloadArray.Job = append(ResourceWorkloadArray.Job, jobData)
 		}
 	}
 
@@ -559,7 +708,10 @@ func GetNamespaces(client *apis.Client, taskName string) ([]*apis.Namespace, []*
 	for _, n := range namespaceList.Items {
 		logrus.Debugf("Processing namespace: %s", n.Name)
 
-		var emptyResourceQuota, emptyResource bool
+		emptyResourceQuota := true
+		emptyResource := true
+		emptyResourceQuotaMessage := ""
+		emptyResourceMessage := ""
 
 		podList, err := client.Clientset.CoreV1().Pods(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
@@ -612,7 +764,8 @@ func GetNamespaces(client *apis.Client, taskName string) ([]*apis.Namespace, []*
 		}
 
 		if len(resourceQuotaList.Items) == 0 {
-			emptyResourceQuota = true
+			emptyResourceQuota = false
+			emptyResourceQuotaMessage = fmt.Sprintf("命名空间 %s 没有设置配额", n.Name)
 			resourceInspections = append(resourceInspections, apis.NewInspection(
 				fmt.Sprintf("命名空间 %s 没有设置配额", n.Name),
 				"未设置资源配额",
@@ -625,7 +778,8 @@ func GetNamespaces(client *apis.Client, taskName string) ([]*apis.Namespace, []*
 			len(jobList.Items) + len(secretList.Items) + (len(configMapList.Items) - 1)
 
 		if totalResources == 0 {
-			emptyResource = true
+			emptyResource = false
+			emptyResourceMessage = fmt.Sprintf("命名空间 %s 下资源为空", n.Name)
 			resourceInspections = append(resourceInspections, apis.NewInspection(
 				fmt.Sprintf("命名空间 %s 下资源为空", n.Name),
 				"检查对象为 Pod、Service、Deployment、Replicaset、Statefulset、Daemonset、Job、Secret、ConfigMap",
@@ -634,18 +788,28 @@ func GetNamespaces(client *apis.Client, taskName string) ([]*apis.Namespace, []*
 		}
 
 		namespaces = append(namespaces, &apis.Namespace{
-			Name:               n.Name,
-			EmptyResourceQuota: emptyResourceQuota,
-			EmptyResource:      emptyResource,
-			PodCount:           len(podList.Items),
-			ServiceCount:       len(serviceList.Items),
-			DeploymentCount:    len(deploymentList.Items),
-			ReplicasetCount:    len(replicaSetList.Items),
-			StatefulsetCount:   len(statefulSetList.Items),
-			DaemonsetCount:     len(daemonSetList.Items),
-			JobCount:           len(jobList.Items),
-			SecretCount:        len(secretList.Items),
-			ConfigMapCount:     len(configMapList.Items) - 1,
+			Name:             n.Name,
+			PodCount:         len(podList.Items),
+			ServiceCount:     len(serviceList.Items),
+			DeploymentCount:  len(deploymentList.Items),
+			ReplicasetCount:  len(replicaSetList.Items),
+			StatefulsetCount: len(statefulSetList.Items),
+			DaemonsetCount:   len(daemonSetList.Items),
+			JobCount:         len(jobList.Items),
+			SecretCount:      len(secretList.Items),
+			ConfigMapCount:   len(configMapList.Items) - 1,
+			Items: []*apis.Item{
+				{
+					Name:    "有资源配置设置",
+					Message: emptyResourceQuotaMessage,
+					Pass:    emptyResourceQuota,
+				},
+				{
+					Name:    "命名空间下资源非空",
+					Message: emptyResourceMessage,
+					Pass:    emptyResource,
+				},
+			},
 		})
 
 		logrus.Debugf("Processed namespace: %s", n.Name)
@@ -655,36 +819,56 @@ func GetNamespaces(client *apis.Client, taskName string) ([]*apis.Namespace, []*
 	return namespaces, resourceInspections, nil
 }
 
-func GetServices(client *apis.Client, taskName string) ([]*apis.Service, []*apis.Inspection, error) {
+func GetServices(client *apis.Client, taskName string, serviceItem map[string][]*apis.Item) ([]*apis.Service, []*apis.Inspection, error) {
 	logrus.Infof("[%s] Starting services inspection", taskName)
 
 	resourceInspections := apis.NewInspections()
 	services := apis.NewServices()
 
-	serviceList, err := client.Clientset.CoreV1().Services("").List(context.TODO(), metav1.ListOptions{})
+	selectorNamespace := ""
+	var set labels.Set
+	set = map[string]string{}
+
+	serviceList, err := client.Clientset.CoreV1().Services(selectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
 	if err != nil {
 		return nil, nil, fmt.Errorf("Error listing services: %v\n", err)
 	}
 
 	for _, s := range serviceList.Items {
 		logrus.Debugf("Processing service: %s/%s", s.Namespace, s.Name)
+		emptyEndpoints := true
+		emptyEndpointsMessage := ""
 		endpoints, err := client.Clientset.CoreV1().Endpoints(s.Namespace).Get(context.TODO(), s.Name, metav1.GetOptions{})
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
+				emptyEndpoints = false
+				emptyEndpointsMessage = fmt.Sprintf("命名空间 %s 下 Service %s 找不到对应 endpoint", s.Namespace, s.Name)
 				logrus.Warnf("Service %s/%s does not have corresponding endpoints", s.Namespace, s.Name)
 				resourceInspections = append(resourceInspections, apis.NewInspection(
 					fmt.Sprintf("命名空间 %s 下 Service %s 找不到对应 endpoint", s.Namespace, s.Name),
 					"对应的 Endpoints 未找到",
 					1,
 				))
+
+				services = append(services, &apis.Service{
+					Name:      s.Name,
+					Namespace: s.Namespace,
+					Items: []*apis.Item{
+						{
+							Name:    "存在对应 Endpoints 且 Subsets 非空",
+							Message: emptyEndpointsMessage,
+							Pass:    emptyEndpoints,
+						},
+					},
+				})
+
 				continue
 			}
-			return nil, nil, fmt.Errorf("Error getting endpoints for service %s/%s: %v\n", s.Namespace, s.Name, err)
 		}
 
-		var emptyEndpoints bool
 		if len(endpoints.Subsets) == 0 {
-			emptyEndpoints = true
+			emptyEndpoints = false
+			emptyEndpointsMessage = fmt.Sprintf("命名空间 %s 下 Service %s 对应 Endpoints 没有 Subsets", s.Namespace, s.Name)
 			resourceInspections = append(resourceInspections, apis.NewInspection(
 				fmt.Sprintf("命名空间 %s 下 Service %s 对应 Endpoints 没有 Subsets", s.Namespace, s.Name),
 				"对应的 Endpoints 没有 Subsets",
@@ -692,10 +876,22 @@ func GetServices(client *apis.Client, taskName string) ([]*apis.Service, []*apis
 			))
 		}
 
+		var items []*apis.Item
+		items = append(items, &apis.Item{
+			Name:    "存在对应 Endpoints 且 Subsets 非空",
+			Message: emptyEndpointsMessage,
+			Pass:    emptyEndpoints,
+		})
+
+		grafanaItem, ok := serviceItem[s.Namespace+"/"+s.Name]
+		if ok {
+			items = append(items, grafanaItem...)
+		}
+
 		services = append(services, &apis.Service{
-			Name:           s.Name,
-			Namespace:      s.Namespace,
-			EmptyEndpoints: emptyEndpoints,
+			Name:      s.Name,
+			Namespace: s.Namespace,
+			Items:     items,
 		})
 	}
 
@@ -726,44 +922,40 @@ func GetIngress(client *apis.Client, taskName string) ([]*apis.Ingress, []*apis.
 		}
 
 		ingress = append(ingress, &apis.Ingress{
-			Name:          i.Name,
-			Namespace:     i.Namespace,
-			DuplicatePath: false,
+			Name:      i.Name,
+			Namespace: i.Namespace,
+			Items: []*apis.Item{
+				{
+					Name:    "不存在重复的 Path 路径",
+					Message: "",
+					Pass:    true,
+				},
+			},
 		})
 	}
 
-	duplicateIngress := make(map[string]int)
-	for key, ingressNames := range ingressMap {
+	for _, ingressNames := range ingressMap {
 		if len(ingressNames) > 1 {
+			result := strings.Join(ingressNames, ",")
 			for _, ingressName := range ingressNames {
-				duplicateIngress[ingressName] = 1
-			}
-			logrus.Warnf("Found duplicate ingress with same path: %s, Ingress list: %v", key, ingressNames)
-		}
-	}
-
-	if len(duplicateIngress) > 0 {
-		var result []string
-		for namespaceName := range duplicateIngress {
-			parts := strings.Split(namespaceName, "/")
-			for index, i := range ingress {
-				if parts[0] == i.Namespace && parts[1] == i.Name {
-					ingress[index] = &apis.Ingress{
-						Name:          i.Name,
-						Namespace:     i.Namespace,
-						DuplicatePath: true,
+				parts := strings.Split(ingressName, "/")
+				for index, i := range ingress {
+					if parts[0] == i.Namespace && parts[1] == i.Name {
+						ingress[index] = &apis.Ingress{
+							Name:      i.Name,
+							Namespace: i.Namespace,
+							Items: []*apis.Item{
+								{
+									Name:    "不存在重复的 Path 路径",
+									Message: fmt.Sprintf("Ingress %s 存在重复的 Path 路径", result),
+									Pass:    false,
+								},
+							},
+						}
 					}
 				}
 			}
-
-			result = append(result, namespaceName)
 		}
-
-		resourceInspections = append(resourceInspections, apis.NewInspection(
-			fmt.Sprintf("Ingress %s 存在重复的 Path", strings.Join(result, ", ")),
-			"存在重复的路径",
-			1,
-		))
 	}
 
 	logrus.Infof("[%s] Completed getting ingresses", taskName)

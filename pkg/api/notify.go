@@ -217,8 +217,15 @@ func TestNotify() http.Handler {
 				common.HandleError(rw, http.StatusInternalServerError, err)
 				return
 			}
+		} else if notify.AppID != "" && notify.AppSecret != "" && (notify.Mobiles != "" || notify.Emails != "") {
+			err = send.NotifyUser(notify.AppID, notify.AppSecret, notify.Mobiles, notify.Emails, "Test")
+			if err != nil {
+				logrus.Errorf("Failed to send test notification: %v", err)
+				common.HandleError(rw, http.StatusInternalServerError, err)
+				return
+			}
 		} else {
-			err = send.Notify(notify.AppID, notify.AppSecret, common.SendTestPDFName, common.SendTestPDFPath, message, "Test")
+			err = send.NotifyChat(notify.AppID, notify.AppSecret, common.SendTestPDFName, common.SendTestPDFPath, message, "Test")
 			if err != nil {
 				logrus.Errorf("Failed to send test notification: %v", err)
 				common.HandleError(rw, http.StatusInternalServerError, err)

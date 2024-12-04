@@ -32,35 +32,40 @@ type ClusterResourceConfig struct {
 }
 
 type NamespaceConfig struct {
-	Enable bool `json:"enable"`
+	Enable         bool              `json:"enable"`
+	SelectorLabels map[string]string `json:"selector_labels"`
 }
 
 type ServiceConfig struct {
-	Enable bool `json:"enable"`
+	Enable            bool              `json:"enable"`
+	SelectorNamespace string            `json:"selector_namespace"`
+	SelectorLabels    map[string]string `json:"selector_labels"`
 }
 
 type IngressConfig struct {
-	Enable bool `json:"enable"`
+	Enable            bool              `json:"enable"`
+	SelectorNamespace string            `json:"selector_namespace"`
+	SelectorLabels    map[string]string `json:"selector_labels"`
 }
 
 type WorkloadConfig struct {
-	Deployment  []*WorkloadDetailConfig `json:"deployment"`
-	Statefulset []*WorkloadDetailConfig `json:"statefulset"`
-	Daemonset   []*WorkloadDetailConfig `json:"daemonset"`
-	Job         []*WorkloadDetailConfig `json:"job"`
-	Cronjob     []*WorkloadDetailConfig `json:"cronjob"`
+	Deployment  *WorkloadDetailConfig `json:"deployment"`
+	Statefulset *WorkloadDetailConfig `json:"statefulset"`
+	Daemonset   *WorkloadDetailConfig `json:"daemonset"`
+	Job         *WorkloadDetailConfig `json:"job"`
+	Cronjob     *WorkloadDetailConfig `json:"cronjob"`
 }
 
 type WorkloadDetailConfig struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Regexp    string `json:"regexp"`
-	Level     int    `json:"level"`
+	Enable            bool              `json:"enable"`
+	SelectorNamespace string            `json:"selector_namespace"`
+	SelectorLabels    map[string]string `json:"selector_labels"`
 }
 
 type NodeConfig struct {
-	Names    []string         `json:"names"`
-	Commands []*CommandConfig `json:"commands"`
+	Enable         bool              `json:"enable"`
+	SelectorLabels map[string]string `json:"selector_labels"`
+	Commands       []*CommandConfig  `json:"commands"`
 }
 
 type CommandConfig struct {
@@ -95,16 +100,6 @@ func NewClusterNodeConfig() *ClusterNodeConfig {
 
 func NewNodeConfigs() []*NodeConfig {
 	return []*NodeConfig{}
-}
-
-func NewWorkloadConfig() *WorkloadConfig {
-	return &WorkloadConfig{
-		Deployment:  []*WorkloadDetailConfig{},
-		Statefulset: []*WorkloadDetailConfig{},
-		Daemonset:   []*WorkloadDetailConfig{},
-		Job:         []*WorkloadDetailConfig{},
-		Cronjob:     []*WorkloadDetailConfig{},
-	}
 }
 
 func NewClusterResourceConfig() *ClusterResourceConfig {

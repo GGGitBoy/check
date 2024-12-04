@@ -44,6 +44,10 @@ func NewResource() *Resource {
 	}
 }
 
+func NewNamespaces() []string {
+	return []string{}
+}
+
 func NewClusters() []*Cluster {
 	return []*Cluster{}
 }
@@ -86,6 +90,44 @@ func GetClusters() http.Handler {
 		}
 
 		jsonData, err := json.MarshalIndent(clusters, "", "\t")
+		if err != nil {
+			logrus.Errorf("Failed to marshal clusters response: %v", err)
+			common.HandleError(rw, http.StatusInternalServerError, err)
+			return
+		}
+
+		if _, err := rw.Write(jsonData); err != nil {
+			logrus.Errorf("Failed to write clusters response: %v", err)
+			common.HandleError(rw, http.StatusInternalServerError, err)
+		}
+	})
+}
+
+func GetNamespaces() http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		namespaces := NewNamespaces()
+		vars := mux.Vars(req)
+		clusterID := vars["id"]
+
+		kubernetesClient, err := common.GetKubernetesClient(clusterID)
+		if err != nil {
+			logrus.Errorf("Failed to get Kubernetes client for cluster %s: %v", clusterID, err)
+			common.HandleError(rw, http.StatusInternalServerError, fmt.Errorf("Failed to get Kubernetes client for cluster %s: %v\n", clusterID, err))
+			return
+		}
+
+		ns, err := kubernetesClient.Clientset.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			logrus.Errorf("Failed to list nodes for cluster %s: %v", clusterID, err)
+			common.HandleError(rw, http.StatusInternalServerError, err)
+			return
+		}
+
+		for _, r := range ns.Items {
+			namespaces = append(namespaces, r.GetName())
+		}
+
+		jsonData, err := json.MarshalIndent(namespaces, "", "\t")
 		if err != nil {
 			logrus.Errorf("Failed to marshal clusters response: %v", err)
 			common.HandleError(rw, http.StatusInternalServerError, err)

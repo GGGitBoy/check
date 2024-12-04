@@ -7,6 +7,8 @@ type Notify struct {
 	AppSecret  string `json:"app_secret"`
 	WebhookURL string `json:"webhook_url"`
 	Secret     string `json:"secret"`
+	Mobiles    string `json:"mobiles"`
+	Emails     string `json:"emails"`
 }
 
 func NewNotify() *Notify {

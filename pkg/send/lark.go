@@ -11,12 +11,14 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkauth "github.com/larksuite/oapi-sdk-go/v3/service/auth/v3"
+	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/sirupsen/logrus"
 	"inspection-server/pkg/common"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -110,7 +112,7 @@ func GenSign(secret string, timestamp int64) (string, error) {
 	return signature, nil
 }
 
-func Notify(appID, appSecret, fileName, filePath, message, taskName string) error {
+func NotifyChat(appID, appSecret, fileName, filePath, message, taskName string) error {
 	logrus.Infof("[%s] Start notify send...", taskName)
 	// 创建 Client
 	client := lark.NewClient(appID, appSecret, lark.WithEnableTokenCache(false))
@@ -262,6 +264,96 @@ func Notify(appID, appSecret, fileName, filePath, message, taskName string) erro
 			}
 
 			logrus.Infof("[%s] File message sent successfully to chat %s", taskName, *i.ChatId)
+		}
+	}
+
+	return nil
+}
+
+func NotifyUser(appID, appSecret, mobiles, emails, taskName string) error {
+	logrus.Infof("[%s] Start notify send...", taskName)
+	// 创建 Client
+	client := lark.NewClient(appID, appSecret, lark.WithEnableTokenCache(false))
+
+	getTokenReq := larkauth.NewInternalAppAccessTokenReqBuilder().
+		Body(larkauth.NewInternalAppAccessTokenReqBodyBuilder().
+			AppId(appID).
+			AppSecret(appSecret).
+			Build()).
+		Build()
+
+	getTokenResp, err := client.Auth.AppAccessToken.Internal(context.Background(), getTokenReq)
+	if err != nil {
+		logrus.Errorf("Error get token in Lark: %v", err)
+		return fmt.Errorf("failed to get token in Lark: %v", err)
+	}
+
+	if !getTokenResp.Success() {
+		logrus.Errorf("Server error get token: Code=%d, Msg=%s, RequestID=%s", getTokenResp.Code, getTokenResp.Msg, getTokenResp.RequestId())
+		return fmt.Errorf("server error get token: Code=%d, Msg=%s, RequestID=%s", getTokenResp.Code, getTokenResp.Msg, getTokenResp.RequestId())
+	}
+
+	logrus.Debugf("Token got successfully: %s", larkcore.Prettify(getTokenResp))
+
+	appAccessTokenResp := larkcore.AppAccessTokenResp{}
+	err = json.Unmarshal(getTokenResp.RawBody, &appAccessTokenResp)
+	if err != nil {
+		logrus.Errorf("Failed to unmarshal request body: %v", err)
+		return fmt.Errorf("Failed to unmarshal request body: %v\n", err)
+	}
+
+	// 添加 token 到请求头
+	requestOptionFunc := larkcore.WithHeaders(http.Header{
+		"Authorization": []string{fmt.Sprintf("Bearer %s", appAccessTokenResp.AppAccessToken)},
+	})
+
+	// 创建请求对象
+	getIdUserReq := larkcontact.NewBatchGetIdUserReqBuilder().
+		UserIdType(`open_id`).
+		Body(larkcontact.NewBatchGetIdUserReqBodyBuilder().
+			Emails(strings.Split(emails, ",")).
+			Mobiles(strings.Split(mobiles, ",")).
+			IncludeResigned(true).
+			Build()).
+		Build()
+
+	// 发起请求
+	getIdUserResp, err := client.Contact.User.BatchGetId(context.Background(), getIdUserReq, requestOptionFunc)
+	if err != nil {
+		logrus.Errorf("Failed to get user ID: %v", err)
+		return fmt.Errorf("Failed to get user ID: %v\n", err)
+	}
+
+	if !getIdUserResp.Success() {
+		logrus.Errorf("Server error sending file message: Code=%d, Msg=%s, RequestID=%s", getIdUserResp.Code, getIdUserResp.Msg, getIdUserResp.RequestId())
+		return fmt.Errorf("server error sending file message: Code=%d, Msg=%s, RequestID=%s", getIdUserResp.Code, getIdUserResp.Msg, getIdUserResp.RequestId())
+	}
+
+	var UserIdList []*string
+	for _, u := range getIdUserResp.Data.UserList {
+		UserIdList = append(UserIdList, u.UserId)
+	}
+
+	for _, userId := range UserIdList {
+		createMessageReq := larkim.NewCreateMessageReqBuilder().
+			ReceiveIdType(`open_id`).
+			Body(larkim.NewCreateMessageReqBodyBuilder().
+				ReceiveId(*userId).
+				MsgType(`interactive`).
+				Content(`{"elements":[{"tag":"div","text":{"content":"This is the plain text","tag":"plain_text"}}],"header":{"template":"blue","title":{"content":"This is the title","tag":"plain_text"}}}`).
+				Build()).
+			Build()
+
+		// 发起请求
+		createMessageResp, err := client.Im.Message.Create(context.Background(), createMessageReq)
+		if err != nil {
+			logrus.Errorf("Failed to get user ID: %v", err)
+			return fmt.Errorf("Failed to get user ID: %v\n", err)
+		}
+
+		if !createMessageResp.Success() {
+			logrus.Errorf("Server error sending file message: Code=%d, Msg=%s, RequestID=%s", createMessageResp.Code, createMessageResp.Msg, createMessageResp.RequestId())
+			return fmt.Errorf("server error sending file message: Code=%d, Msg=%s, RequestID=%s", createMessageResp.Code, createMessageResp.Msg, createMessageResp.RequestId())
 		}
 	}
 

@@ -8,11 +8,11 @@ import (
 
 // GetNotify retrieves a notification by its ID from the database.
 func GetNotify(notifyID string) (*apis.Notify, error) {
-	row := DB.QueryRow("SELECT id, name, app_id, app_secret, webhook_url, secret FROM notify WHERE id = ? LIMIT 1", notifyID)
+	row := DB.QueryRow("SELECT id, name, app_id, app_secret, webhook_url, secret, mobiles, emails FROM notify WHERE id = ? LIMIT 1", notifyID)
 
-	var id, name, appID, appSecret, webhookURL, secret string
+	var id, name, appID, appSecret, webhookURL, secret, mobiles, emails string
 	notify := apis.NewNotify()
-	err := row.Scan(&id, &name, &appID, &appSecret, &webhookURL, &secret)
+	err := row.Scan(&id, &name, &appID, &appSecret, &webhookURL, &secret, &mobiles, &emails)
 	if err != nil {
 		return nil, fmt.Errorf("Error scanning row: %v\n", err)
 	}
@@ -24,6 +24,8 @@ func GetNotify(notifyID string) (*apis.Notify, error) {
 		AppSecret:  appSecret,
 		WebhookURL: webhookURL,
 		Secret:     secret,
+		Mobiles:    mobiles,
+		Emails:     emails,
 	}
 
 	logrus.Infof("[DB] Notify get successfully with ID: %s", notify.ID)
@@ -32,7 +34,7 @@ func GetNotify(notifyID string) (*apis.Notify, error) {
 
 // ListNotify retrieves all notifications from the database.
 func ListNotify() ([]*apis.Notify, error) {
-	rows, err := DB.Query("SELECT id, name, app_id, app_secret, webhook_url, secret FROM notify")
+	rows, err := DB.Query("SELECT id, name, app_id, app_secret, webhook_url, secret, mobiles, emails FROM notify")
 	if err != nil {
 		return nil, fmt.Errorf("Error querying database: %v\n", err)
 	}
@@ -40,8 +42,8 @@ func ListNotify() ([]*apis.Notify, error) {
 
 	notifys := apis.NewNotifys()
 	for rows.Next() {
-		var id, name, appID, appSecret, webhookURL, secret string
-		err = rows.Scan(&id, &name, &appID, &appSecret, &webhookURL, &secret)
+		var id, name, appID, appSecret, webhookURL, secret, mobiles, emails string
+		err = rows.Scan(&id, &name, &appID, &appSecret, &webhookURL, &secret, &mobiles, &emails)
 		if err != nil {
 			return nil, fmt.Errorf("Error scanning row: %v\n", err)
 		}
@@ -51,6 +53,8 @@ func ListNotify() ([]*apis.Notify, error) {
 			Name:       name,
 			AppID:      appID,
 			WebhookURL: webhookURL,
+			Mobiles:    mobiles,
+			Emails:     emails,
 		})
 	}
 
@@ -69,14 +73,14 @@ func CreateNotify(notify *apis.Notify) error {
 		return fmt.Errorf("Error starting transaction: %v\n", err)
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO notify(id, name, app_id, app_secret, webhook_url, secret) VALUES(?, ?, ?, ?, ?, ?)")
+	stmt, err := tx.Prepare("INSERT INTO notify(id, name, app_id, app_secret, webhook_url, secret, mobiles, emails) VALUES(?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		tx.Rollback()
 		return fmt.Errorf("Error preparing statement: %v\n", err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(notify.ID, notify.Name, notify.AppID, notify.AppSecret, notify.WebhookURL, notify.Secret)
+	_, err = stmt.Exec(notify.ID, notify.Name, notify.AppID, notify.AppSecret, notify.WebhookURL, notify.Secret, notify.Mobiles, notify.Emails)
 	if err != nil {
 		tx.Rollback()
 		return fmt.Errorf("Error executing statement: %v\n", err)
@@ -92,7 +96,7 @@ func CreateNotify(notify *apis.Notify) error {
 
 // UpdateNotify updates an existing notification in the database.
 func UpdateNotify(notify *apis.Notify) error {
-	_, err := DB.Exec("UPDATE notify SET name = ?, app_id = ?, app_secret = ?, webhook_url = ?, secret = ? WHERE id = ?", notify.Name, notify.AppID, notify.AppSecret, notify.WebhookURL, notify.Secret, notify.ID)
+	_, err := DB.Exec("UPDATE notify SET name = ?, app_id = ?, app_secret = ?, webhook_url = ?, secret = ?, mobiles = ?, emails = ? WHERE id = ?", notify.Name, notify.AppID, notify.AppSecret, notify.WebhookURL, notify.Secret, notify.Mobiles, notify.Emails, notify.ID)
 	if err != nil {
 		return fmt.Errorf("Error updating notification with ID %s: %v\n", notify.ID, err)
 	}
