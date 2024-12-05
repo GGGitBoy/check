@@ -140,8 +140,12 @@ func NewAllGrafanaItems() map[string]*GrafanaItem {
 
 func NewGrafanaItem() *GrafanaItem {
 	return &GrafanaItem{
-		ClusterCoreItem: &ClusterCoreItem{},
-		ClusterNodeItem: &ClusterNodeItem{},
+		ClusterCoreItem: &ClusterCoreItem{
+			ClusterItem: make(map[string][]*apis.Item),
+		},
+		ClusterNodeItem: &ClusterNodeItem{
+			NodeItem: make(map[string][]*apis.Item),
+		},
 		ClusterResourceItem: &ClusterResourceItem{
 			DeploymentItem:  make(map[string][]*apis.Item),
 			StatefulsetItem: make(map[string][]*apis.Item),
@@ -194,6 +198,8 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 					pass = true
 				} else if alert.State == "Alerting" || alert.State == "Pending" {
 					pass = false
+				} else if alert.State == "NoData" || alert.State == "Error" {
+					continue
 				}
 
 				prometheusFrom, ok := alert.Labels["prometheus_from"]
@@ -225,16 +231,20 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 				}
 
 				if group.Name == "inspection-cluster" {
-					allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom] = append(allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom], apis.NewItem(alertname, summary, false))
-				} else if group.Name == "inspection-node" {
-					instance, ok := alert.Labels["instance"]
-					if !ok {
-						logrus.Errorf("Alert %s missing 'instance' label", rule.Name)
-						continue
+					if kind == "cluster" {
+						allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom] = append(allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom], apis.NewItem(alertname, summary, pass))
 					}
-					result := strings.Split(instance, ":")[0]
+				} else if group.Name == "inspection-node" {
+					if kind == "node" {
+						instance, ok := alert.Labels["instance"]
+						if !ok {
+							logrus.Errorf("Alert %s missing 'instance' label", rule.Name)
+							continue
+						}
+						nodeIP := strings.Split(instance, ":")[0]
 
-					allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[result] = append(allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[result], apis.NewItem(alertname, summary, false))
+						allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP] = append(allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP], apis.NewItem(alertname, summary, pass))
+					}
 				} else if group.Name == "inspection-resource" {
 					if kind == "workload" {
 						createdByKind, ok := alert.Labels["created_by_kind"]
