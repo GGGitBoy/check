@@ -121,9 +121,11 @@ type ClusterResourceItem struct {
 	DaemonsetItem   map[string][]*apis.Item `json:"daemonset_item"`
 	JobItem         map[string][]*apis.Item `json:"job_item"`
 	CronjobItem     map[string][]*apis.Item `json:"cronjob_item"`
-	Namespace       map[string][]*apis.Item `json:"namespace"`
+	NamespaceItem   map[string][]*apis.Item `json:"namespace_item"`
 	ServiceItems    map[string][]*apis.Item `json:"service_items"`
-	Ingress         map[string][]*apis.Item `json:"ingress"`
+	IngressItems    map[string][]*apis.Item `json:"ingress_items"`
+	PVCItems        map[string][]*apis.Item `json:"pvc_items"`
+	PVItems         map[string][]*apis.Item `json:"pv_items"`
 }
 
 type Item struct {
@@ -146,9 +148,11 @@ func NewGrafanaItem() *GrafanaItem {
 			DaemonsetItem:   make(map[string][]*apis.Item),
 			JobItem:         make(map[string][]*apis.Item),
 			CronjobItem:     make(map[string][]*apis.Item),
-			Namespace:       make(map[string][]*apis.Item),
+			NamespaceItem:   make(map[string][]*apis.Item),
 			ServiceItems:    make(map[string][]*apis.Item),
-			Ingress:         make(map[string][]*apis.Item),
+			IngressItems:    make(map[string][]*apis.Item),
+			PVCItems:        make(map[string][]*apis.Item),
+			PVItems:         make(map[string][]*apis.Item),
 		},
 	}
 }
@@ -184,77 +188,111 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 
 	for _, group := range alerting.Data.RuleGroups {
 		for _, rule := range group.Rules {
-			if rule.State == "firing" || rule.State == "pending" {
-				for _, alert := range rule.Alerts {
-					if alert.State == "Alerting" || alert.State == "pending" {
-						prometheusFrom, ok := alert.Labels["prometheus_from"]
+			for _, alert := range rule.Alerts {
+				var pass bool
+				if alert.State == "Normal" {
+					pass = true
+				} else if alert.State == "Alerting" || alert.State == "Pending" {
+					pass = false
+				}
+
+				prometheusFrom, ok := alert.Labels["prometheus_from"]
+				if !ok {
+					logrus.Errorf("Alert %s missing 'prometheus_from' label", rule.Name)
+					continue
+				}
+
+				alertname, ok := alert.Labels["alertname"]
+				if !ok {
+					logrus.Errorf("Alert %s missing 'alertname' label", rule.Name)
+					continue
+				}
+
+				summary, ok := alert.Annotations["summary"]
+				if !ok {
+					logrus.Errorf("Alert %s missing 'summary' annotation", rule.Name)
+					continue
+				}
+
+				kind, ok := alert.Annotations["kind"]
+				if !ok {
+					logrus.Errorf("Alert %s missing 'kind' annotation", rule.Name)
+					continue
+				}
+
+				if allGrafanaItems[prometheusFrom] == nil {
+					allGrafanaItems[prometheusFrom] = NewGrafanaItem()
+				}
+
+				if group.Name == "inspection-cluster" {
+					allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom] = append(allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom], apis.NewItem(alertname, summary, false))
+				} else if group.Name == "inspection-node" {
+					instance, ok := alert.Labels["instance"]
+					if !ok {
+						logrus.Errorf("Alert %s missing 'instance' label", rule.Name)
+						continue
+					}
+					result := strings.Split(instance, ":")[0]
+
+					allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[result] = append(allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[result], apis.NewItem(alertname, summary, false))
+				} else if group.Name == "inspection-resource" {
+					if kind == "workload" {
+						createdByKind, ok := alert.Labels["created_by_kind"]
 						if !ok {
-							logrus.Errorf("Alert %s missing 'prometheus_from' label", rule.Name)
+							logrus.Errorf("Alert %s missing 'created_by_kind' label", rule.Name)
 							continue
 						}
 
-						alertname, ok := alert.Labels["alertname"]
+						createdByName, ok := alert.Labels["created_by_name"]
 						if !ok {
-							logrus.Errorf("Alert %s missing 'alertname' label", rule.Name)
+							logrus.Errorf("Alert %s missing 'created_by_name' label", rule.Name)
 							continue
 						}
 
-						summary, ok := alert.Annotations["summary"]
+						namespace, ok := alert.Labels["namespace"]
 						if !ok {
-							logrus.Errorf("Alert %s missing 'summary' annotation", rule.Name)
+							logrus.Errorf("Alert %s missing 'namespace' label", rule.Name)
 							continue
 						}
 
-						if allGrafanaItems[prometheusFrom] == nil {
-							allGrafanaItems[prometheusFrom] = NewGrafanaItem()
+						if createdByKind == "ReplicaSet" {
+							index := strings.LastIndex(createdByName, "-")
+							workloadName := createdByName[:index]
+							workloadNamespaceName := namespace + "/" + workloadName
+
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName], apis.NewItem(alertname, summary, pass))
+						} else if createdByKind == "StatefulSet" {
+							workloadNamespaceName := namespace + "/" + createdByName
+
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName], apis.NewItem(alertname, summary, pass))
+						} else if createdByKind == "DaemonSet" {
+							workloadNamespaceName := namespace + "/" + createdByName
+
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName], apis.NewItem(alertname, summary, pass))
+						}
+					} else if kind == "pvc" {
+						namespace, ok := alert.Labels["namespace"]
+						if !ok {
+							logrus.Errorf("Alert %s missing 'namespace' label", rule.Name)
+							continue
 						}
 
-						if group.Name == "inspection-cluster" {
-							allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom] = append(allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom], apis.NewItem(alertname, summary, false, 1))
-						} else if group.Name == "inspection-node" {
-							instance, ok := alert.Labels["instance"]
-							if !ok {
-								logrus.Errorf("Alert %s missing 'instance' label", rule.Name)
-								continue
-							}
-							result := strings.Split(instance, ":")[0]
-
-							allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[result] = append(allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[result], apis.NewItem(alertname, summary, false, 1))
-						} else if group.Name == "inspection-resource" {
-							createdByKind, ok := alert.Labels["created_by_kind"]
-							if !ok {
-								logrus.Errorf("Alert %s missing 'created_by_kind' label", rule.Name)
-								continue
-							}
-
-							createdByName, ok := alert.Labels["created_by_name"]
-							if !ok {
-								logrus.Errorf("Alert %s missing 'created_by_name' label", rule.Name)
-								continue
-							}
-
-							namespace, ok := alert.Labels["namespace"]
-							if !ok {
-								logrus.Errorf("Alert %s missing 'namespace' label", rule.Name)
-								continue
-							}
-
-							if createdByKind == "ReplicaSet" {
-								index := strings.LastIndex(createdByName, "-")
-								workloadName := createdByName[:index]
-								result := namespace + "/" + workloadName
-
-								allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[result] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[result], apis.NewItem(alertname, summary, false, 1))
-							} else if createdByKind == "StatefulSet" {
-								result := namespace + "/" + createdByName
-
-								allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[result] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[result], apis.NewItem(alertname, summary, false, 1))
-							} else if createdByKind == "DaemonSet" {
-								result := namespace + "/" + createdByName
-
-								allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[result] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[result], apis.NewItem(alertname, summary, false, 1))
-							}
+						persistentvolumeclaim, ok := alert.Labels["persistentvolumeclaim"]
+						if !ok {
+							logrus.Errorf("Alert %s missing 'persistentvolumeclaim' label", rule.Name)
+							continue
 						}
+						pvcNamespaceName := namespace + "/" + persistentvolumeclaim
+
+						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName], apis.NewItem(alertname, summary, pass))
+					} else if kind == "pv" {
+						persistentvolume, ok := alert.Labels["persistentvolume"]
+						if !ok {
+							logrus.Errorf("Alert %s missing 'persistentvolume' label", rule.Name)
+							continue
+						}
+
+						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume], apis.NewItem(alertname, summary, pass))
 					}
 				}
 			}

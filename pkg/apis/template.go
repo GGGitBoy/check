@@ -29,6 +29,8 @@ type ClusterResourceConfig struct {
 	NamespaceConfig *NamespaceConfig `json:"namespace_config"`
 	ServiceConfig   *ServiceConfig   `json:"service_config"`
 	IngressConfig   *IngressConfig   `json:"ingress_config"`
+	PVCConfig       *PVCConfig       `json:"pvc_config"`
+	PVConfig        *PVConfig        `json:"pv_config"`
 }
 
 type NamespaceConfig struct {
@@ -40,6 +42,17 @@ type ServiceConfig struct {
 	Enable            bool              `json:"enable"`
 	SelectorNamespace string            `json:"selector_namespace"`
 	SelectorLabels    map[string]string `json:"selector_labels"`
+}
+
+type PVCConfig struct {
+	Enable            bool              `json:"enable"`
+	SelectorNamespace string            `json:"selector_namespace"`
+	SelectorLabels    map[string]string `json:"selector_labels"`
+}
+
+type PVConfig struct {
+	Enable         bool              `json:"enable"`
+	SelectorLabels map[string]string `json:"selector_labels"`
 }
 
 type IngressConfig struct {
@@ -108,5 +121,7 @@ func NewClusterResourceConfig() *ClusterResourceConfig {
 		NamespaceConfig: &NamespaceConfig{},
 		ServiceConfig:   &ServiceConfig{},
 		IngressConfig:   &IngressConfig{},
+		PVCConfig:       &PVCConfig{},
+		PVConfig:        &PVConfig{},
 	}
 }

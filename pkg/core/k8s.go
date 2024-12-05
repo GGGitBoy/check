@@ -11,7 +11,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -19,7 +18,6 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"os"
 	"regexp"
-	"strings"
 	"sync"
 )
 
@@ -369,12 +367,14 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 	resourceInspections := apis.NewInspections()
 
 	if workloadConfig.Deployment.Enable {
-		var set labels.Set
-		if workloadConfig.Deployment.SelectorLabels != nil {
+		listOptions := metav1.ListOptions{}
+		if workloadConfig.Deployment.SelectorLabels != nil && len(workloadConfig.Deployment.SelectorLabels) > 0 {
+			var set labels.Set
 			set = workloadConfig.Deployment.SelectorLabels
+			listOptions = metav1.ListOptions{LabelSelector: set.AsSelector().String()}
 		}
 
-		deployments, err := client.Clientset.AppsV1().Deployments(workloadConfig.Deployment.SelectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
+		deployments, err := client.Clientset.AppsV1().Deployments(workloadConfig.Deployment.SelectorNamespace).List(context.TODO(), listOptions)
 		if err != nil {
 			return nil, nil, fmt.Errorf("Error list Deployment: %v\n", err)
 		}
@@ -432,12 +432,14 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 	}
 
 	if workloadConfig.Daemonset.Enable {
-		var set labels.Set
-		if workloadConfig.Daemonset.SelectorLabels != nil {
+		listOptions := metav1.ListOptions{}
+		if workloadConfig.Daemonset.SelectorLabels != nil && len(workloadConfig.Daemonset.SelectorLabels) > 0 {
+			var set labels.Set
 			set = workloadConfig.Daemonset.SelectorLabels
+			listOptions = metav1.ListOptions{LabelSelector: set.AsSelector().String()}
 		}
 
-		daemonSets, err := client.Clientset.AppsV1().DaemonSets(workloadConfig.Daemonset.SelectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
+		daemonSets, err := client.Clientset.AppsV1().DaemonSets(workloadConfig.Daemonset.SelectorNamespace).List(context.TODO(), listOptions)
 		if err != nil {
 			return nil, nil, fmt.Errorf("Error list Deployment: %v\n", err)
 		}
@@ -495,12 +497,14 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 	}
 
 	if workloadConfig.Statefulset.Enable {
-		var set labels.Set
-		if workloadConfig.Statefulset.SelectorLabels != nil {
+		listOptions := metav1.ListOptions{}
+		if workloadConfig.Statefulset.SelectorLabels != nil && len(workloadConfig.Statefulset.SelectorLabels) > 0 {
+			var set labels.Set
 			set = workloadConfig.Statefulset.SelectorLabels
+			listOptions = metav1.ListOptions{LabelSelector: set.AsSelector().String()}
 		}
 
-		statefulsets, err := client.Clientset.AppsV1().StatefulSets(workloadConfig.Statefulset.SelectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
+		statefulsets, err := client.Clientset.AppsV1().StatefulSets(workloadConfig.Statefulset.SelectorNamespace).List(context.TODO(), listOptions)
 		if err != nil {
 			return nil, nil, fmt.Errorf("Error list Deployment: %v\n", err)
 		}
@@ -558,12 +562,14 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 	}
 
 	if workloadConfig.Job.Enable {
-		var set labels.Set
-		if workloadConfig.Statefulset.SelectorLabels != nil {
-			set = workloadConfig.Statefulset.SelectorLabels
+		listOptions := metav1.ListOptions{}
+		if workloadConfig.Job.SelectorLabels != nil && len(workloadConfig.Job.SelectorLabels) > 0 {
+			var set labels.Set
+			set = workloadConfig.Job.SelectorLabels
+			listOptions = metav1.ListOptions{LabelSelector: set.AsSelector().String()}
 		}
 
-		jobs, err := client.Clientset.BatchV1().Jobs(workloadConfig.Job.SelectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
+		jobs, err := client.Clientset.BatchV1().Jobs(workloadConfig.Job.SelectorNamespace).List(context.TODO(), listOptions)
 		if err != nil {
 			return nil, nil, fmt.Errorf("Error list Job: %v\n", err)
 		}
@@ -692,274 +698,6 @@ func GetPod(regexpString, namespace string, set labels.Set, clientset *kubernete
 
 	logrus.Infof("[%s] Completed pod retrieval in namespace %s", taskName, namespace)
 	return pods, nil
-}
-
-func GetNamespaces(client *apis.Client, taskName string) ([]*apis.Namespace, []*apis.Inspection, error) {
-	logrus.Infof("[%s] Starting namespaces inspection", taskName)
-
-	resourceInspections := apis.NewInspections()
-	namespaces := apis.NewNamespaces()
-
-	namespaceList, err := client.Clientset.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("Error listing namespaces: %v\n", err)
-	}
-
-	for _, n := range namespaceList.Items {
-		logrus.Debugf("Processing namespace: %s", n.Name)
-
-		emptyResourceQuota := true
-		emptyResource := true
-		emptyResourceQuotaMessage := ""
-		emptyResourceMessage := ""
-
-		podList, err := client.Clientset.CoreV1().Pods(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing pods in namespace %s: %v\n", n.Name, err)
-		}
-
-		serviceList, err := client.Clientset.CoreV1().Services(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing services in namespace %s: %v\n", n.Name, err)
-		}
-
-		deploymentList, err := client.Clientset.AppsV1().Deployments(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing deployments in namespace %s: %v\n", n.Name, err)
-		}
-
-		replicaSetList, err := client.Clientset.AppsV1().ReplicaSets(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing replica sets in namespace %s: %v\n", n.Name, err)
-		}
-
-		statefulSetList, err := client.Clientset.AppsV1().StatefulSets(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing stateful sets in namespace %s: %v\n", n.Name, err)
-		}
-
-		daemonSetList, err := client.Clientset.AppsV1().DaemonSets(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing daemon sets in namespace %s: %v\n", n.Name, err)
-		}
-
-		jobList, err := client.Clientset.BatchV1().Jobs(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing jobs in namespace %s: %v\n", n.Name, err)
-		}
-
-		secretList, err := client.Clientset.CoreV1().Secrets(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing secrets in namespace %s: %v\n", n.Name, err)
-		}
-
-		configMapList, err := client.Clientset.CoreV1().ConfigMaps(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing config maps in namespace %s: %v\n", n.Name, err)
-		}
-
-		resourceQuotaList, err := client.Clientset.CoreV1().ResourceQuotas(n.Name).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing resource quotas in namespace %s: %v\n", n.Name, err)
-		}
-
-		if len(resourceQuotaList.Items) == 0 {
-			emptyResourceQuota = false
-			emptyResourceQuotaMessage = fmt.Sprintf("命名空间 %s 没有设置配额", n.Name)
-			resourceInspections = append(resourceInspections, apis.NewInspection(
-				fmt.Sprintf("命名空间 %s 没有设置配额", n.Name),
-				"未设置资源配额",
-				1,
-			))
-		}
-
-		totalResources := len(podList.Items) + len(serviceList.Items) + len(deploymentList.Items) +
-			len(replicaSetList.Items) + len(statefulSetList.Items) + len(daemonSetList.Items) +
-			len(jobList.Items) + len(secretList.Items) + (len(configMapList.Items) - 1)
-
-		if totalResources == 0 {
-			emptyResource = false
-			emptyResourceMessage = fmt.Sprintf("命名空间 %s 下资源为空", n.Name)
-			resourceInspections = append(resourceInspections, apis.NewInspection(
-				fmt.Sprintf("命名空间 %s 下资源为空", n.Name),
-				"检查对象为 Pod、Service、Deployment、Replicaset、Statefulset、Daemonset、Job、Secret、ConfigMap",
-				1,
-			))
-		}
-
-		namespaces = append(namespaces, &apis.Namespace{
-			Name:             n.Name,
-			PodCount:         len(podList.Items),
-			ServiceCount:     len(serviceList.Items),
-			DeploymentCount:  len(deploymentList.Items),
-			ReplicasetCount:  len(replicaSetList.Items),
-			StatefulsetCount: len(statefulSetList.Items),
-			DaemonsetCount:   len(daemonSetList.Items),
-			JobCount:         len(jobList.Items),
-			SecretCount:      len(secretList.Items),
-			ConfigMapCount:   len(configMapList.Items) - 1,
-			Items: []*apis.Item{
-				{
-					Name:    "有资源配置设置",
-					Message: emptyResourceQuotaMessage,
-					Pass:    emptyResourceQuota,
-				},
-				{
-					Name:    "命名空间下资源非空",
-					Message: emptyResourceMessage,
-					Pass:    emptyResource,
-				},
-			},
-		})
-
-		logrus.Debugf("Processed namespace: %s", n.Name)
-	}
-
-	logrus.Infof("[%s] Completed namespace retrieval", taskName)
-	return namespaces, resourceInspections, nil
-}
-
-func GetServices(client *apis.Client, taskName string, serviceItem map[string][]*apis.Item) ([]*apis.Service, []*apis.Inspection, error) {
-	logrus.Infof("[%s] Starting services inspection", taskName)
-
-	resourceInspections := apis.NewInspections()
-	services := apis.NewServices()
-
-	selectorNamespace := ""
-	var set labels.Set
-	set = map[string]string{}
-
-	serviceList, err := client.Clientset.CoreV1().Services(selectorNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: set.AsSelector().String()})
-	if err != nil {
-		return nil, nil, fmt.Errorf("Error listing services: %v\n", err)
-	}
-
-	for _, s := range serviceList.Items {
-		logrus.Debugf("Processing service: %s/%s", s.Namespace, s.Name)
-		emptyEndpoints := true
-		emptyEndpointsMessage := ""
-		endpoints, err := client.Clientset.CoreV1().Endpoints(s.Namespace).Get(context.TODO(), s.Name, metav1.GetOptions{})
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				emptyEndpoints = false
-				emptyEndpointsMessage = fmt.Sprintf("命名空间 %s 下 Service %s 找不到对应 endpoint", s.Namespace, s.Name)
-				logrus.Warnf("Service %s/%s does not have corresponding endpoints", s.Namespace, s.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(
-					fmt.Sprintf("命名空间 %s 下 Service %s 找不到对应 endpoint", s.Namespace, s.Name),
-					"对应的 Endpoints 未找到",
-					1,
-				))
-
-				services = append(services, &apis.Service{
-					Name:      s.Name,
-					Namespace: s.Namespace,
-					Items: []*apis.Item{
-						{
-							Name:    "存在对应 Endpoints 且 Subsets 非空",
-							Message: emptyEndpointsMessage,
-							Pass:    emptyEndpoints,
-						},
-					},
-				})
-
-				continue
-			}
-		}
-
-		if len(endpoints.Subsets) == 0 {
-			emptyEndpoints = false
-			emptyEndpointsMessage = fmt.Sprintf("命名空间 %s 下 Service %s 对应 Endpoints 没有 Subsets", s.Namespace, s.Name)
-			resourceInspections = append(resourceInspections, apis.NewInspection(
-				fmt.Sprintf("命名空间 %s 下 Service %s 对应 Endpoints 没有 Subsets", s.Namespace, s.Name),
-				"对应的 Endpoints 没有 Subsets",
-				1,
-			))
-		}
-
-		var items []*apis.Item
-		items = append(items, &apis.Item{
-			Name:    "存在对应 Endpoints 且 Subsets 非空",
-			Message: emptyEndpointsMessage,
-			Pass:    emptyEndpoints,
-		})
-
-		grafanaItem, ok := serviceItem[s.Namespace+"/"+s.Name]
-		if ok {
-			items = append(items, grafanaItem...)
-		}
-
-		services = append(services, &apis.Service{
-			Name:      s.Name,
-			Namespace: s.Namespace,
-			Items:     items,
-		})
-	}
-
-	logrus.Infof("[%s] Completed getting services", taskName)
-	return services, resourceInspections, nil
-}
-func GetIngress(client *apis.Client, taskName string) ([]*apis.Ingress, []*apis.Inspection, error) {
-	logrus.Infof("[%s] Starting ingresses inspection", taskName)
-
-	resourceInspections := apis.NewInspections()
-	ingress := apis.NewIngress()
-
-	ingressList, err := client.Clientset.NetworkingV1().Ingresses("").List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("Error listing ingresses: %v\n", err)
-	}
-
-	ingressMap := make(map[string][]string)
-	for _, i := range ingressList.Items {
-		for _, rule := range i.Spec.Rules {
-			host := rule.Host
-			if rule.HTTP != nil {
-				for _, path := range rule.HTTP.Paths {
-					key := host + path.Path
-					ingressMap[key] = append(ingressMap[key], fmt.Sprintf("%s/%s", i.Namespace, i.Name))
-				}
-			}
-		}
-
-		ingress = append(ingress, &apis.Ingress{
-			Name:      i.Name,
-			Namespace: i.Namespace,
-			Items: []*apis.Item{
-				{
-					Name:    "不存在重复的 Path 路径",
-					Message: "",
-					Pass:    true,
-				},
-			},
-		})
-	}
-
-	for _, ingressNames := range ingressMap {
-		if len(ingressNames) > 1 {
-			result := strings.Join(ingressNames, ",")
-			for _, ingressName := range ingressNames {
-				parts := strings.Split(ingressName, "/")
-				for index, i := range ingress {
-					if parts[0] == i.Namespace && parts[1] == i.Name {
-						ingress[index] = &apis.Ingress{
-							Name:      i.Name,
-							Namespace: i.Namespace,
-							Items: []*apis.Item{
-								{
-									Name:    "不存在重复的 Path 路径",
-									Message: fmt.Sprintf("Ingress %s 存在重复的 Path 路径", result),
-									Pass:    false,
-								},
-							},
-						}
-					}
-				}
-			}
-		}
-	}
-
-	logrus.Infof("[%s] Completed getting ingresses", taskName)
-	return ingress, resourceInspections, nil
 }
 
 func getResourceList(val string) corev1.ResourceList {

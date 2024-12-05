@@ -34,6 +34,8 @@ type ClusterResource struct {
 	Namespace   []*Namespace  `json:"namespace"`
 	Service     []*Service    `json:"service"`
 	Ingress     []*Ingress    `json:"ingress"`
+	PVC         []*PVC        `json:"pvc"`
+	PV          []*PV         `json:"pv"`
 	Inspections []*Inspection `json:"inspections"`
 }
 
@@ -104,18 +106,23 @@ type Item struct {
 	Name    string `json:"name"`
 	Pass    bool   `json:"pass"`
 	Message string `json:"message"`
-	Level   int    `json:"level"`
-}
-
-type PersistentVolumeClaim struct {
-	Name  string `json:"name"`
-	State string `json:"state"`
 }
 
 type Service struct {
 	Name      string  `json:"name"`
 	Namespace string  `json:"namespace"`
 	Items     []*Item `json:"items"`
+}
+
+type PVC struct {
+	Name      string  `json:"name"`
+	Namespace string  `json:"namespace"`
+	Items     []*Item `json:"items"`
+}
+
+type PV struct {
+	Name  string  `json:"name"`
+	Items []*Item `json:"items"`
 }
 
 type Ingress struct {
@@ -188,6 +195,8 @@ func NewClusterResource() *ClusterResource {
 		Namespace:   []*Namespace{},
 		Service:     []*Service{},
 		Ingress:     []*Ingress{},
+		PVC:         []*PVC{},
+		PV:          []*PV{},
 		Inspections: []*Inspection{},
 	}
 }
@@ -222,12 +231,16 @@ func NewNamespaces() []*Namespace {
 	return []*Namespace{}
 }
 
-func NewPersistentVolumeClaims() []*PersistentVolumeClaim {
-	return []*PersistentVolumeClaim{}
-}
-
 func NewServices() []*Service {
 	return []*Service{}
+}
+
+func NewPVCs() []*PVC {
+	return []*PVC{}
+}
+
+func NewPVs() []*PV {
+	return []*PV{}
 }
 
 func NewIngress() []*Ingress {
@@ -246,11 +259,10 @@ func NewInspection(title, message string, level int) *Inspection {
 	}
 }
 
-func NewItem(name, message string, pass bool, level int) *Item {
+func NewItem(name, message string, pass bool) *Item {
 	return &Item{
 		Name:    name,
 		Pass:    pass,
 		Message: message,
-		Level:   level,
 	}
 }

@@ -117,6 +117,15 @@ func Register() error {
 				SelectorNamespace: "",
 				SelectorLabels:    nil,
 			},
+			PVCConfig: &apis.PVCConfig{
+				Enable:            true,
+				SelectorNamespace: "",
+				SelectorLabels:    nil,
+			},
+			PVConfig: &apis.PVConfig{
+				Enable:         true,
+				SelectorLabels: nil,
+			},
 		}
 
 		kubernetesConfig = append(kubernetesConfig, &apis.KubernetesConfig{

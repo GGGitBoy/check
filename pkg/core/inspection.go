@@ -93,7 +93,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				resourceInspections = append(resourceInspections, resourceInspectionArray...)
 
 				if k.ClusterResourceConfig.NamespaceConfig.Enable {
-					ResourceNamespaceArray, resourceInspectionArray, err := GetNamespaces(client, task.Name)
+					ResourceNamespaceArray, resourceInspectionArray, err := GetNamespaces(client, k.ClusterResourceConfig.NamespaceConfig, task.Name, grafanaItems.ClusterResourceItem.NamespaceItem)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get namespaces for cluster %s: %v\n", k.ClusterID, err)
 					}
@@ -103,7 +103,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				}
 
 				if k.ClusterResourceConfig.ServiceConfig.Enable {
-					ResourceServiceArray, resourceInspectionArray, err := GetServices(client, task.Name, grafanaItems.ClusterResourceItem.ServiceItems)
+					ResourceServiceArray, resourceInspectionArray, err := GetServices(client, k.ClusterResourceConfig.ServiceConfig, task.Name, grafanaItems.ClusterResourceItem.ServiceItems)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get services for cluster %s: %v\n", k.ClusterID, err)
 					}
@@ -113,12 +113,32 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				}
 
 				if k.ClusterResourceConfig.IngressConfig.Enable {
-					ResourceIngressArray, resourceInspectionArray, err := GetIngress(client, task.Name)
+					ResourceIngressArray, resourceInspectionArray, err := GetIngress(client, k.ClusterResourceConfig.IngressConfig, task.Name, grafanaItems.ClusterResourceItem.IngressItems)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get ingress for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.Ingress = ResourceIngressArray
+					resourceInspections = append(resourceInspections, resourceInspectionArray...)
+				}
+
+				if k.ClusterResourceConfig.PVCConfig.Enable {
+					ResourcePVCArray, resourceInspectionArray, err := GetPVC(client, k.ClusterResourceConfig.PVCConfig, task.Name, grafanaItems.ClusterResourceItem.PVCItems)
+					if err != nil {
+						return task, inspectionFailed, fmt.Errorf("Failed to get pvc for cluster %s: %v\n", k.ClusterID, err)
+					}
+
+					clusterResource.PVC = ResourcePVCArray
+					resourceInspections = append(resourceInspections, resourceInspectionArray...)
+				}
+
+				if k.ClusterResourceConfig.PVConfig.Enable {
+					ResourcePVArray, resourceInspectionArray, err := GetPV(client, k.ClusterResourceConfig.PVConfig, task.Name, grafanaItems.ClusterResourceItem.PVItems)
+					if err != nil {
+						return task, inspectionFailed, fmt.Errorf("Failed to get pv for cluster %s: %v\n", k.ClusterID, err)
+					}
+
+					clusterResource.PV = ResourcePVArray
 					resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
