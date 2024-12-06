@@ -50,7 +50,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 			if !isDeploymentAvailable(&deploy) {
 				deployHealth = false
 				deployHealthMessage = fmt.Sprintf("命名空间 %s 下的 Deployment %s 处于非健康状态", deploy.Namespace, deploy.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Deployment %s 警告", deploy.Name), fmt.Sprintf("命名空间 %s 下的 Deployment %s 处于非健康状态", deploy.Namespace, deploy.Name), defaultLevel(1)))
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Deployment %s 警告", deploy.Name), fmt.Sprintf("命名空间 %s 下的 Deployment %s 处于非健康状态", deploy.Namespace, deploy.Name), defaultLevel(1), []string{}))
 			}
 
 			var condition []apis.Condition
@@ -128,7 +128,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 			if !isDaemonSetAvailable(&ds) {
 				dsHealth = false
 				dsHealthMessage = fmt.Sprintf("命名空间 %s 下的 DaemonSet %s 处于非健康状态", ds.Namespace, ds.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("DaemonSet %s 警告", ds.Name), fmt.Sprintf("命名空间 %s 下的 DaemonSet %s 处于非健康状态", ds.Namespace, ds.Name), defaultLevel(1)))
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("DaemonSet %s 警告", ds.Name), fmt.Sprintf("命名空间 %s 下的 DaemonSet %s 处于非健康状态", ds.Namespace, ds.Name), defaultLevel(1), []string{}))
 			}
 
 			var condition []apis.Condition
@@ -206,7 +206,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 			if !isStatefulSetAvailable(&sts) {
 				stsHealth = false
 				stsHealthMessage = fmt.Sprintf("命名空间 %s 下的 Statefulset %s 处于非健康状态", sts.Namespace, sts.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Statefulset %s 警告", sts.Name), fmt.Sprintf("命名空间 %s 下的 Statefulset %s 处于非健康状态", sts.Namespace, sts.Name), defaultLevel(1)))
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Statefulset %s 警告", sts.Name), fmt.Sprintf("命名空间 %s 下的 Statefulset %s 处于非健康状态", sts.Namespace, sts.Name), defaultLevel(1), []string{}))
 			}
 
 			var condition []apis.Condition
@@ -284,7 +284,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 			if !isJobCompleted(&j) {
 				jHealth = false
 				jHealthMessage = fmt.Sprintf("命名空间 %s 下的 Job %s 处于非健康状态", j.Namespace, j.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Job %s 警告", j.Name), fmt.Sprintf("命名空间 %s 下的 Job %s 处于非健康状态", j.Namespace, j.Name), defaultLevel(1)))
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Job %s 警告", j.Name), fmt.Sprintf("命名空间 %s 下的 Job %s 处于非健康状态", j.Namespace, j.Name), defaultLevel(1), []string{}))
 			}
 
 			var condition []apis.Condition

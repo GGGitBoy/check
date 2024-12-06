@@ -54,6 +54,7 @@ func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskNam
 					fmt.Sprintf("命名空间 %s 下 Service %s 找不到对应 endpoint", s.Namespace, s.Name),
 					"对应的 Endpoints 未找到",
 					1,
+					[]string{},
 				))
 
 				services = append(services, &apis.Service{
@@ -79,6 +80,7 @@ func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskNam
 				fmt.Sprintf("命名空间 %s 下 Service %s 对应 Endpoints 没有 Subsets", s.Namespace, s.Name),
 				"对应的 Endpoints 没有 Subsets",
 				1,
+				[]string{},
 			))
 		}
 

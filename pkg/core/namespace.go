@@ -93,6 +93,7 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 				fmt.Sprintf("命名空间 %s 没有设置配额", n.Name),
 				"未设置资源配额",
 				1,
+				[]string{},
 			))
 		}
 
@@ -107,6 +108,7 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 				fmt.Sprintf("命名空间 %s 下资源为空", n.Name),
 				"检查对象为 Pod、Service、Deployment、Replicaset、Statefulset、Daemonset、Job、Secret、ConfigMap",
 				1,
+				[]string{},
 			))
 		}
 

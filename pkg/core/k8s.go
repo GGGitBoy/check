@@ -78,7 +78,7 @@ func GetHealthCheck(client *apis.Client, clusterName, taskName string) (*apis.He
 
 		for _, r := range results {
 			if r.Error != "" {
-				coreInspections = append(coreInspections, apis.NewInspection(fmt.Sprintf("cluster %s (%s) failed", clusterName, r.Description), fmt.Sprintf("%s", r.Error), 3))
+				coreInspections = append(coreInspections, apis.NewInspection(fmt.Sprintf("cluster %s (%s) failed", clusterName, r.Description), fmt.Sprintf("%s", r.Error), 3, []string{}))
 			}
 
 			switch r.Description {

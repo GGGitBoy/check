@@ -161,9 +161,9 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				clusterNode.Nodes = NodeNodeArray
 				clusterResource.Workloads = ResourceWorkloadArray
 			} else {
-				coreInspections = append(coreInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3))
-				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3))
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3))
+				coreInspections = append(coreInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3, []string{}))
+				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3, []string{}))
+				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3, []string{}))
 			}
 
 			if allGrafanaInspections != nil && allGrafanaInspections[k.ClusterName] != nil {
