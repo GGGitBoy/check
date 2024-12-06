@@ -193,15 +193,6 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 	for _, group := range alerting.Data.RuleGroups {
 		for _, rule := range group.Rules {
 			for _, alert := range rule.Alerts {
-				var pass bool
-				if alert.State == "Normal" {
-					pass = true
-				} else if alert.State == "Alerting" || alert.State == "Pending" {
-					pass = false
-				} else if alert.State == "NoData" || alert.State == "Error" {
-					continue
-				}
-
 				prometheusFrom, ok := alert.Labels["prometheus_from"]
 				if !ok {
 					logrus.Errorf("Alert %s missing 'prometheus_from' label", rule.Name)
@@ -220,6 +211,17 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 					continue
 				}
 
+				var pass bool
+				var message string
+				if alert.State == "Normal" {
+					pass = true
+				} else if alert.State == "Alerting" || alert.State == "Pending" {
+					pass = false
+					message = summary
+				} else if alert.State == "NoData" || alert.State == "Error" {
+					continue
+				}
+
 				kind, ok := alert.Annotations["kind"]
 				if !ok {
 					logrus.Errorf("Alert %s missing 'kind' annotation", rule.Name)
@@ -232,7 +234,7 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 
 				if group.Name == "inspection-cluster" {
 					if kind == "cluster" {
-						allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom] = append(allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom], apis.NewItem(alertname, summary, pass))
+						allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom] = append(allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom], apis.NewItem(alertname, message, pass))
 					}
 				} else if group.Name == "inspection-node" {
 					if kind == "node" {
@@ -243,7 +245,7 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 						}
 						nodeIP := strings.Split(instance, ":")[0]
 
-						allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP] = append(allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP], apis.NewItem(alertname, summary, pass))
+						allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP] = append(allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP], apis.NewItem(alertname, message, pass))
 					}
 				} else if group.Name == "inspection-resource" {
 					if kind == "workload" {
@@ -270,15 +272,15 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 							workloadName := createdByName[:index]
 							workloadNamespaceName := namespace + "/" + workloadName
 
-							allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName], apis.NewItem(alertname, summary, pass))
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName], apis.NewItem(alertname, message, pass))
 						} else if createdByKind == "StatefulSet" {
 							workloadNamespaceName := namespace + "/" + createdByName
 
-							allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName], apis.NewItem(alertname, summary, pass))
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName], apis.NewItem(alertname, message, pass))
 						} else if createdByKind == "DaemonSet" {
 							workloadNamespaceName := namespace + "/" + createdByName
 
-							allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName], apis.NewItem(alertname, summary, pass))
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName], apis.NewItem(alertname, message, pass))
 						}
 					} else if kind == "pvc" {
 						namespace, ok := alert.Labels["namespace"]
@@ -294,7 +296,7 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 						}
 						pvcNamespaceName := namespace + "/" + persistentvolumeclaim
 
-						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName], apis.NewItem(alertname, summary, pass))
+						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName], apis.NewItem(alertname, message, pass))
 					} else if kind == "pv" {
 						persistentvolume, ok := alert.Labels["persistentvolume"]
 						if !ok {
@@ -302,7 +304,21 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 							continue
 						}
 
-						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume], apis.NewItem(alertname, summary, pass))
+						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume], apis.NewItem(alertname, message, pass))
+					} else if kind == "namespace" {
+						namespace, ok := alert.Labels["namespace"]
+						if !ok {
+							logrus.Errorf("Alert %s missing 'namespace' label", rule.Name)
+							continue
+						}
+
+						resource, ok := alert.Labels["resource"]
+						if !ok {
+							logrus.Errorf("Alert %s missing 'resource' label", rule.Name)
+							continue
+						}
+
+						allGrafanaItems[prometheusFrom].ClusterResourceItem.NamespaceItem[namespace] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.NamespaceItem[namespace], apis.NewItem(alertname+" - "+resource, message, pass))
 					}
 				}
 			}

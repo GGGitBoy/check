@@ -73,11 +73,11 @@ func GetIngress(client *apis.Client, ingressConfig *apis.IngressConfig, taskName
 
 	for _, i := range allIngress {
 		var items []*apis.Item
-
 		grafanaItem, ok := ingressItem[i.Namespace+"/"+i.Name]
 		if ok {
 			items = append(items, grafanaItem...)
 		}
+
 		ingress = append(ingress, &apis.Ingress{
 			Name:      i.Name,
 			Namespace: i.Namespace,

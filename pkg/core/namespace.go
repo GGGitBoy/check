@@ -7,6 +7,7 @@ import (
 	"inspection-server/pkg/apis"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"strings"
 )
 
 func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName string, nsItem map[string][]*apis.Item) ([]*apis.Namespace, []*apis.Inspection, error) {
@@ -122,6 +123,37 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 			},
 		}
 
+		if nsConfig.NameCheck.IncludeName != "" {
+			if nsConfig.NameCheck.ExcludedNamespace != "" {
+				excludedNamespaces := strings.Split(nsConfig.NameCheck.ExcludedNamespace, ",")
+				if !Contains(excludedNamespaces, n.Name) {
+					nameCheck := strings.Contains(n.Name, nsConfig.NameCheck.IncludeName)
+					nameCheckMessage := ""
+					if !nameCheck {
+						nameCheckMessage = fmt.Sprintf("未包含 %s 内容", nsConfig.NameCheck.IncludeName)
+					}
+
+					items = append(items, &apis.Item{
+						Name:    "命名空间名称是否符合规范",
+						Message: nameCheckMessage,
+						Pass:    nameCheck,
+					})
+				}
+			} else {
+				nameCheck := strings.Contains(n.Name, nsConfig.NameCheck.IncludeName)
+				nameCheckMessage := ""
+				if !nameCheck {
+					nameCheckMessage = fmt.Sprintf("未包含 %s 内容", nsConfig.NameCheck.IncludeName)
+				}
+
+				items = append(items, &apis.Item{
+					Name:    "命名空间名称是否符合规范",
+					Message: nameCheckMessage,
+					Pass:    nameCheck,
+				})
+			}
+		}
+
 		grafanaItem, ok := nsItem[n.Name]
 		if ok {
 			items = append(items, grafanaItem...)
@@ -146,4 +178,13 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 
 	logrus.Infof("[%s] Completed namespace retrieval", taskName)
 	return namespaces, resourceInspections, nil
+}
+
+func Contains(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }

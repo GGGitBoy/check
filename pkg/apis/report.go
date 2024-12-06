@@ -14,6 +14,7 @@ type Global struct {
 
 type ClusterCore struct {
 	HealthCheck *HealthCheck  `json:"health_check"`
+	Items       []*Item       `json:"items"`
 	Inspections []*Inspection `json:"inspections"`
 }
 
@@ -40,9 +41,10 @@ type ClusterResource struct {
 }
 
 type Inspection struct {
-	Title   string `json:"title"`
-	Message string `json:"message"`
-	Level   int    `json:"level"`
+	Title   string   `json:"title"`
+	Message string   `json:"message"`
+	Level   int      `json:"level"`
+	Names   []string `json:"names"`
 }
 
 type Kubernetes struct {
@@ -251,11 +253,12 @@ func NewInspections() []*Inspection {
 	return []*Inspection{}
 }
 
-func NewInspection(title, message string, level int) *Inspection {
+func NewInspection(title, message string, level int, names []string) *Inspection {
 	return &Inspection{
 		Title:   title,
 		Message: message,
 		Level:   level,
+		Names:   names,
 	}
 }
 

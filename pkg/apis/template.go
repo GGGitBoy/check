@@ -21,6 +21,7 @@ type ClusterCoreConfig struct {
 }
 
 type ClusterNodeConfig struct {
+	Enable     bool          `json:"enable"`
 	NodeConfig []*NodeConfig `json:"node_config"`
 }
 
@@ -36,6 +37,12 @@ type ClusterResourceConfig struct {
 type NamespaceConfig struct {
 	Enable         bool              `json:"enable"`
 	SelectorLabels map[string]string `json:"selector_labels"`
+	NameCheck      *NameCheck        `json:"name_check"`
+}
+
+type NameCheck struct {
+	IncludeName       string `json:"include_name"`
+	ExcludedNamespace string `json:"excluded_namespace"`
 }
 
 type ServiceConfig struct {
@@ -76,7 +83,6 @@ type WorkloadDetailConfig struct {
 }
 
 type NodeConfig struct {
-	Enable         bool              `json:"enable"`
 	SelectorLabels map[string]string `json:"selector_labels"`
 	Commands       []*CommandConfig  `json:"commands"`
 }

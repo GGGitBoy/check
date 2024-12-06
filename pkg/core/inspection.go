@@ -74,24 +74,35 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				sendMessageDetail = append(sendMessageDetail, fmt.Sprintf("集群 %s 巡检警告：", k.ClusterName))
 				logrus.Infof("[%s] Processing inspections for cluster: %s", task.Name, k.ClusterName)
 
+				// cluster
+				var items []*apis.Item
+				grafanaItem, ok := grafanaItems.ClusterCoreItem.ClusterItem[k.ClusterName]
+				if ok {
+					items = append(items, grafanaItem...)
+				}
+				clusterCore.Items = items
+
 				healthCheck, coreInspectionArray, err := GetHealthCheck(client, k.ClusterName, task.Name)
 				if err != nil {
 					return task, inspectionFailed, fmt.Errorf("Failed to get health check for cluster %s: %v\n", k.ClusterID, err)
 				}
 				coreInspections = append(coreInspections, coreInspectionArray...)
 
-				NodeNodeArray, nodeInspectionArray, err := GetNodes(client, k.ClusterNodeConfig.NodeConfig, task.Name)
+				// node
+				NodeNodeArray, nodeInspectionArray, err := GetNodes(client, k.ClusterNodeConfig, task.Name, grafanaItems.ClusterNodeItem.NodeItem)
 				if err != nil {
 					return task, inspectionFailed, fmt.Errorf("Failed to get nodes for cluster %s: %v\n", k.ClusterID, err)
 				}
 				nodeInspections = append(nodeInspections, nodeInspectionArray...)
 
+				// workload
 				ResourceWorkloadArray, resourceInspectionArray, err := GetWorkloads(client, k.ClusterResourceConfig.WorkloadConfig, task.Name, grafanaItems.ClusterResourceItem)
 				if err != nil {
 					return task, inspectionFailed, fmt.Errorf("Failed to get workloads for cluster %s: %v\n", k.ClusterID, err)
 				}
 				resourceInspections = append(resourceInspections, resourceInspectionArray...)
 
+				// namespace
 				if k.ClusterResourceConfig.NamespaceConfig.Enable {
 					ResourceNamespaceArray, resourceInspectionArray, err := GetNamespaces(client, k.ClusterResourceConfig.NamespaceConfig, task.Name, grafanaItems.ClusterResourceItem.NamespaceItem)
 					if err != nil {
@@ -102,6 +113,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 					resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
+				// service
 				if k.ClusterResourceConfig.ServiceConfig.Enable {
 					ResourceServiceArray, resourceInspectionArray, err := GetServices(client, k.ClusterResourceConfig.ServiceConfig, task.Name, grafanaItems.ClusterResourceItem.ServiceItems)
 					if err != nil {
@@ -112,6 +124,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 					resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
+				// ingress
 				if k.ClusterResourceConfig.IngressConfig.Enable {
 					ResourceIngressArray, resourceInspectionArray, err := GetIngress(client, k.ClusterResourceConfig.IngressConfig, task.Name, grafanaItems.ClusterResourceItem.IngressItems)
 					if err != nil {
@@ -122,6 +135,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 					resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
+				// pvc
 				if k.ClusterResourceConfig.PVCConfig.Enable {
 					ResourcePVCArray, resourceInspectionArray, err := GetPVC(client, k.ClusterResourceConfig.PVCConfig, task.Name, grafanaItems.ClusterResourceItem.PVCItems)
 					if err != nil {
@@ -132,6 +146,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 					resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
+				// pv
 				if k.ClusterResourceConfig.PVConfig.Enable {
 					ResourcePVArray, resourceInspectionArray, err := GetPV(client, k.ClusterResourceConfig.PVConfig, task.Name, grafanaItems.ClusterResourceItem.PVItems)
 					if err != nil {

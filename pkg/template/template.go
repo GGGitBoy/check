@@ -67,11 +67,13 @@ func Register() error {
 		clusterNodeConfig := apis.NewClusterNodeConfig()
 		clusterResourceConfig := apis.NewClusterResourceConfig()
 
-		clusterNodeConfig.NodeConfig = []*apis.NodeConfig{
-			{
-				Enable:         true,
-				SelectorLabels: nil,
-				Commands:       generateWorkerCommands(provider),
+		clusterNodeConfig = &apis.ClusterNodeConfig{
+			Enable: true,
+			NodeConfig: []*apis.NodeConfig{
+				{
+					SelectorLabels: nil,
+					Commands:       generateWorkerCommands(provider),
+				},
 			},
 		}
 
@@ -106,6 +108,10 @@ func Register() error {
 			NamespaceConfig: &apis.NamespaceConfig{
 				Enable:         true,
 				SelectorLabels: nil,
+				NameCheck: &apis.NameCheck{
+					IncludeName:       "",
+					ExcludedNamespace: "",
+				},
 			},
 			ServiceConfig: &apis.ServiceConfig{
 				Enable:            true,
