@@ -12,9 +12,15 @@ type Global struct {
 	ReportTime string `json:"report_time"`
 }
 
+type ItemsCount struct {
+	PassCount  int `json:"pass_count"`
+	TotalCount int `json:"total_count"`
+}
+
 type ClusterCore struct {
 	HealthCheck *HealthCheck  `json:"health_check"`
 	Items       []*Item       `json:"items"`
+	ItemsCount  *ItemsCount   `json:"items_count"`
 	Inspections []*Inspection `json:"inspections"`
 }
 
@@ -64,19 +70,21 @@ type Workload struct {
 }
 
 type WorkloadData struct {
-	Name      string  `json:"name"`
-	Namespace string  `json:"namespace"`
-	Pods      []*Pod  `json:"pods"`
-	Status    *Status `json:"status"`
-	Items     []*Item `json:"items"`
+	Name       string      `json:"name"`
+	Namespace  string      `json:"namespace"`
+	Pods       []*Pod      `json:"pods"`
+	Status     *Status     `json:"status"`
+	Items      []*Item     `json:"items"`
+	ItemsCount *ItemsCount `json:"items_count"`
 }
 
 type Node struct {
-	Name     string    `json:"name"`
-	HostIP   string    `json:"host_ip"`
-	Resource *Resource `json:"resource"`
-	Commands *Command  `json:"commands"`
-	Items    []*Item   `json:"items"`
+	Name   string `json:"name"`
+	HostIP string `json:"host_ip"`
+	//Resource *Resource `json:"resource"`
+	//Commands *Command  `json:"commands"`
+	Items      []*Item     `json:"items"`
+	ItemsCount *ItemsCount `json:"items_count"`
 }
 
 type Resource struct {
@@ -91,17 +99,18 @@ type Resource struct {
 }
 
 type Namespace struct {
-	Name             string  `json:"name"`
-	PodCount         int     `json:"pod_count"`
-	ServiceCount     int     `json:"service_count"`
-	DeploymentCount  int     `json:"deployment_count"`
-	ReplicasetCount  int     `json:"replicaset_count"`
-	StatefulsetCount int     `json:"statefulset_count"`
-	DaemonsetCount   int     `json:"daemonset_count"`
-	JobCount         int     `json:"job_count"`
-	SecretCount      int     `json:"secret_count"`
-	ConfigMapCount   int     `json:"config_map_count"`
-	Items            []*Item `json:"items"`
+	Name             string      `json:"name"`
+	PodCount         int         `json:"pod_count"`
+	ServiceCount     int         `json:"service_count"`
+	DeploymentCount  int         `json:"deployment_count"`
+	ReplicasetCount  int         `json:"replicaset_count"`
+	StatefulsetCount int         `json:"statefulset_count"`
+	DaemonsetCount   int         `json:"daemonset_count"`
+	JobCount         int         `json:"job_count"`
+	SecretCount      int         `json:"secret_count"`
+	ConfigMapCount   int         `json:"config_map_count"`
+	Items            []*Item     `json:"items"`
+	ItemsCount       *ItemsCount `json:"items_count"`
 }
 
 type Item struct {
@@ -111,26 +120,30 @@ type Item struct {
 }
 
 type Service struct {
-	Name      string  `json:"name"`
-	Namespace string  `json:"namespace"`
-	Items     []*Item `json:"items"`
+	Name       string      `json:"name"`
+	Namespace  string      `json:"namespace"`
+	Items      []*Item     `json:"items"`
+	ItemsCount *ItemsCount `json:"items_count"`
 }
 
 type PVC struct {
-	Name      string  `json:"name"`
-	Namespace string  `json:"namespace"`
-	Items     []*Item `json:"items"`
+	Name       string      `json:"name"`
+	Namespace  string      `json:"namespace"`
+	Items      []*Item     `json:"items"`
+	ItemsCount *ItemsCount `json:"items_count"`
 }
 
 type PV struct {
-	Name  string  `json:"name"`
-	Items []*Item `json:"items"`
+	Name       string      `json:"name"`
+	Items      []*Item     `json:"items"`
+	ItemsCount *ItemsCount `json:"items_count"`
 }
 
 type Ingress struct {
-	Name      string  `json:"name"`
-	Namespace string  `json:"namespace"`
-	Items     []*Item `json:"items"`
+	Name       string      `json:"name"`
+	Namespace  string      `json:"namespace"`
+	Items      []*Item     `json:"items"`
+	ItemsCount *ItemsCount `json:"items_count"`
 }
 
 type Pod struct {
