@@ -149,7 +149,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				clusterNode.Nodes = NodeNodeArray
 				clusterResource.Workloads = ResourceWorkloadArray
 			} else {
-				allCoreInspections = append(allCoreInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3, []string{}))
+				allCoreInspections = append(allCoreInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), 3, []string{}))
 			}
 
 			//if allGrafanaInspections != nil && allGrafanaInspections[k.ClusterName] != nil {
@@ -165,6 +165,9 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 			//		resourceInspections = append(resourceInspections, allGrafanaInspections[k.ClusterName].ClusterResourceInspection...)
 			//	}
 			//}
+
+			coreInspections := GetCoreInspections(clusterCore.Items)
+			allCoreInspections = append(allCoreInspections, coreInspections...)
 
 			nodeInspections := GetNodeInspections(clusterNode.Nodes)
 			allNodeInspections = append(allResourceInspections, nodeInspections...)
@@ -309,9 +312,8 @@ func GetWorkloadInspections(workloadDatas *apis.Workload) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -325,9 +327,8 @@ func GetWorkloadInspections(workloadDatas *apis.Workload) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -341,9 +342,8 @@ func GetWorkloadInspections(workloadDatas *apis.Workload) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -357,9 +357,8 @@ func GetWorkloadInspections(workloadDatas *apis.Workload) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -373,9 +372,8 @@ func GetWorkloadInspections(workloadDatas *apis.Workload) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -399,9 +397,8 @@ func GetServiceInspections(datas []*apis.Service) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -425,9 +422,8 @@ func GetIngressInspections(datas []*apis.Ingress) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -451,9 +447,8 @@ func GetPVCInspections(datas []*apis.PVC) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -477,9 +472,8 @@ func GetPVInspections(datas []*apis.PV) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -503,9 +497,8 @@ func GetNamespaceInspections(datas []*apis.Namespace) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
@@ -529,13 +522,33 @@ func GetNodeInspections(datas []*apis.Node) []*apis.Inspection {
 			if !i.Pass {
 				if inspectionMap[i.Name] == nil {
 					inspectionMap[i.Name] = &apis.Inspection{
-						Title:   i.Name,
-						Message: i.Message,
-						Level:   i.Level,
+						Title: i.Name,
+						Level: i.Level,
 					}
 				}
 
 				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("%s / %s\n", d.Name, d.HostIP))
+			}
+		}
+	}
+
+	var inspections []*apis.Inspection
+	for _, i := range inspectionMap {
+		inspections = append(inspections, i)
+	}
+
+	return inspections
+}
+
+func GetCoreInspections(items []*apis.Item) []*apis.Inspection {
+	inspectionMap := make(map[string]*apis.Inspection)
+	for _, i := range items {
+		if !i.Pass {
+			if inspectionMap[i.Name] == nil {
+				inspectionMap[i.Name] = &apis.Inspection{
+					Title: i.Name,
+					Level: i.Level,
+				}
 			}
 		}
 	}

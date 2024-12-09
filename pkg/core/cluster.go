@@ -128,7 +128,7 @@ func GetClusterCore(client *apis.Client, clusterCoreConfig *apis.ClusterCoreConf
 		}
 
 		items = append(items, &apis.Item{
-			Name:    "存在非预期的 chart 版本",
+			Name:    "是否为预期的 chart 版本",
 			Message: chartVersionCheckMessage,
 			Pass:    chartVersionCheck,
 			Level:   1,

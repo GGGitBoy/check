@@ -101,7 +101,7 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 
 		items := []*apis.Item{
 			{
-				Name:    "有资源配置设置",
+				Name:    "有资源配额设置",
 				Message: emptyResourceQuotaMessage,
 				Pass:    emptyResourceQuota,
 				Level:   1,
@@ -125,7 +125,7 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 					}
 
 					items = append(items, &apis.Item{
-						Name:    "命名空间名称是否符合规范",
+						Name:    "命名空间名称符合规范",
 						Message: nameCheckMessage,
 						Pass:    nameCheck,
 					})
@@ -138,7 +138,7 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 				}
 
 				items = append(items, &apis.Item{
-					Name:    "命名空间名称是否符合规范",
+					Name:    "命名空间名称符合规范",
 					Message: nameCheckMessage,
 					Pass:    nameCheck,
 				})
@@ -161,7 +161,7 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 			StatefulsetCount: len(statefulSetList.Items),
 			DaemonsetCount:   len(daemonSetList.Items),
 			JobCount:         len(jobList.Items),
-			SecretCount:      len(secretList.Items),
+			SecretCount:      len(secretList.Items) - 1,
 			ConfigMapCount:   len(configMapList.Items) - 1,
 			Items:            items,
 			ItemsCount:       itemsCount,

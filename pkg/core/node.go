@@ -127,31 +127,31 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 
 			items := []*apis.Item{
 				{
-					Name:    "Limits CPU 超过 80 %",
+					Name:    "Limits CPU 未超过 80 %",
 					Message: highLimitsCPUMessage,
 					Pass:    highLimitsCPU,
 					Level:   2,
 				},
 				{
-					Name:    "Limits Memory 超过 80 %",
+					Name:    "Limits Memory 未超过 80 %",
 					Message: highLimitsMemoryMessage,
 					Pass:    highLimitsMemory,
 					Level:   2,
 				},
 				{
-					Name:    "Requests CPU 超过 80 %",
+					Name:    "Requests CPU 未超过 80 %",
 					Message: highRequestsCPUMessage,
 					Pass:    highRequestsCPU,
 					Level:   2,
 				},
 				{
-					Name:    "Requests Memory 超过 80 %",
+					Name:    "Requests Memory 未超过 80 %",
 					Message: highRequestsMemoryMessage,
 					Pass:    highRequestsMemory,
 					Level:   2,
 				},
 				{
-					Name:    "Requests Pods 超过 80 %",
+					Name:    "Requests Pods 未超过 80 %",
 					Message: highRequestsPodsMessage,
 					Pass:    highRequestsPods,
 					Level:   2,
