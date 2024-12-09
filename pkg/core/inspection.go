@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"inspection-server/pkg/apis"
 	"inspection-server/pkg/common"
 	"inspection-server/pkg/db"
@@ -9,8 +10,6 @@ import (
 	"inspection-server/pkg/send"
 	"strings"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -42,11 +41,6 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 	report := apis.NewReport()
 	kubernetes := apis.NewKubernetes()
 
-	allGrafanaInspections, err := GetAllGrafanaInspections(task.Name)
-	if err != nil {
-		logrus.Errorf("Failed to get all Grafana inspections: %v", err)
-	}
-
 	allGrafanaItems, err := GetAllGrafanaItems(task.Name)
 	if err != nil {
 		logrus.Errorf("Failed to get all Grafana items: %v", err)
@@ -61,9 +55,10 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 			clusterCore := apis.NewClusterCore()
 			clusterNode := apis.NewClusterNode()
 			clusterResource := apis.NewClusterResource()
-			coreInspections := apis.NewInspections()
-			nodeInspections := apis.NewInspections()
-			resourceInspections := apis.NewInspections()
+
+			allCoreInspections := apis.NewInspections()
+			allNodeInspections := apis.NewInspections()
+			allResourceInspections := apis.NewInspections()
 
 			grafanaItems := NewGrafanaItem()
 			if allGrafanaItems != nil && allGrafanaItems[k.ClusterName] != nil {
@@ -75,116 +70,123 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				logrus.Infof("[%s] Processing inspections for cluster: %s", task.Name, k.ClusterName)
 
 				// cluster
-				var items []*apis.Item
-				grafanaItem, ok := grafanaItems.ClusterCoreItem.ClusterItem[k.ClusterName]
-				if ok {
-					items = append(items, grafanaItem...)
-				}
-				clusterCore.Items = items
-
-				healthCheck, coreInspectionArray, err := GetHealthCheck(client, k.ClusterName, task.Name)
+				clusterCore, err = GetClusterCore(client, k.ClusterCoreConfig, k.ClusterName, task.Name, grafanaItems.ClusterCoreItem.ClusterItem)
 				if err != nil {
 					return task, inspectionFailed, fmt.Errorf("Failed to get health check for cluster %s: %v\n", k.ClusterID, err)
 				}
-				coreInspections = append(coreInspections, coreInspectionArray...)
+
+				//coreInspections = append(coreInspections, coreInspectionArray...)
 
 				// node
-				NodeNodeArray, nodeInspectionArray, err := GetNodes(client, k.ClusterNodeConfig, task.Name, grafanaItems.ClusterNodeItem.NodeItem)
+				NodeNodeArray, err := GetNodes(client, k.ClusterNodeConfig, task.Name, grafanaItems.ClusterNodeItem.NodeItem)
 				if err != nil {
 					return task, inspectionFailed, fmt.Errorf("Failed to get nodes for cluster %s: %v\n", k.ClusterID, err)
 				}
-				nodeInspections = append(nodeInspections, nodeInspectionArray...)
+				//nodeInspections = append(nodeInspections, nodeInspectionArray...)
 
 				// workload
-				ResourceWorkloadArray, resourceInspectionArray, err := GetWorkloads(client, k.ClusterResourceConfig.WorkloadConfig, task.Name, grafanaItems.ClusterResourceItem)
+				ResourceWorkloadArray, err := GetWorkloads(client, k.ClusterResourceConfig.WorkloadConfig, task.Name, grafanaItems.ClusterResourceItem)
 				if err != nil {
 					return task, inspectionFailed, fmt.Errorf("Failed to get workloads for cluster %s: %v\n", k.ClusterID, err)
 				}
-				resourceInspections = append(resourceInspections, resourceInspectionArray...)
+				//resourceInspections = append(resourceInspections, resourceInspectionArray...)
 
 				// namespace
 				if k.ClusterResourceConfig.NamespaceConfig.Enable {
-					ResourceNamespaceArray, resourceInspectionArray, err := GetNamespaces(client, k.ClusterResourceConfig.NamespaceConfig, task.Name, grafanaItems.ClusterResourceItem.NamespaceItem)
+					ResourceNamespaceArray, err := GetNamespaces(client, k.ClusterResourceConfig.NamespaceConfig, task.Name, grafanaItems.ClusterResourceItem.NamespaceItem)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get namespaces for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.Namespace = ResourceNamespaceArray
-					resourceInspections = append(resourceInspections, resourceInspectionArray...)
+					//resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
 				// service
 				if k.ClusterResourceConfig.ServiceConfig.Enable {
-					ResourceServiceArray, resourceInspectionArray, err := GetServices(client, k.ClusterResourceConfig.ServiceConfig, task.Name, grafanaItems.ClusterResourceItem.ServiceItems)
+					ResourceServiceArray, err := GetServices(client, k.ClusterResourceConfig.ServiceConfig, task.Name, grafanaItems.ClusterResourceItem.ServiceItems)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get services for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.Service = ResourceServiceArray
-					resourceInspections = append(resourceInspections, resourceInspectionArray...)
+					//resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
 				// ingress
 				if k.ClusterResourceConfig.IngressConfig.Enable {
-					ResourceIngressArray, resourceInspectionArray, err := GetIngress(client, k.ClusterResourceConfig.IngressConfig, task.Name, grafanaItems.ClusterResourceItem.IngressItems)
+					ResourceIngressArray, err := GetIngress(client, k.ClusterResourceConfig.IngressConfig, task.Name, grafanaItems.ClusterResourceItem.IngressItems)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get ingress for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.Ingress = ResourceIngressArray
-					resourceInspections = append(resourceInspections, resourceInspectionArray...)
+					//resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
 				// pvc
 				if k.ClusterResourceConfig.PVCConfig.Enable {
-					ResourcePVCArray, resourceInspectionArray, err := GetPVC(client, k.ClusterResourceConfig.PVCConfig, task.Name, grafanaItems.ClusterResourceItem.PVCItems)
+					ResourcePVCArray, err := GetPVC(client, k.ClusterResourceConfig.PVCConfig, task.Name, grafanaItems.ClusterResourceItem.PVCItems)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get pvc for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.PVC = ResourcePVCArray
-					resourceInspections = append(resourceInspections, resourceInspectionArray...)
+					//resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
 				// pv
 				if k.ClusterResourceConfig.PVConfig.Enable {
-					ResourcePVArray, resourceInspectionArray, err := GetPV(client, k.ClusterResourceConfig.PVConfig, task.Name, grafanaItems.ClusterResourceItem.PVItems)
+					ResourcePVArray, err := GetPV(client, k.ClusterResourceConfig.PVConfig, task.Name, grafanaItems.ClusterResourceItem.PVItems)
 					if err != nil {
 						return task, inspectionFailed, fmt.Errorf("Failed to get pv for cluster %s: %v\n", k.ClusterID, err)
 					}
 
 					clusterResource.PV = ResourcePVArray
-					resourceInspections = append(resourceInspections, resourceInspectionArray...)
+					//resourceInspections = append(resourceInspections, resourceInspectionArray...)
 				}
 
-				clusterCore.HealthCheck = healthCheck
 				clusterNode.Nodes = NodeNodeArray
 				clusterResource.Workloads = ResourceWorkloadArray
 			} else {
-				coreInspections = append(coreInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3, []string{}))
-				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3, []string{}))
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3, []string{}))
+				allCoreInspections = append(allCoreInspections, apis.NewInspection(fmt.Sprintf("cluster %s is not ready", k.ClusterID), fmt.Sprintf("can not get the %s client", k.ClusterID), 3, []string{}))
 			}
 
-			if allGrafanaInspections != nil && allGrafanaInspections[k.ClusterName] != nil {
-				if len(allGrafanaInspections[k.ClusterName].ClusterCoreInspection) > 0 {
-					coreInspections = append(coreInspections, allGrafanaInspections[k.ClusterName].ClusterCoreInspection...)
-				}
+			//if allGrafanaInspections != nil && allGrafanaInspections[k.ClusterName] != nil {
+			//	if len(allGrafanaInspections[k.ClusterName].ClusterCoreInspection) > 0 {
+			//		coreInspections = append(coreInspections, allGrafanaInspections[k.ClusterName].ClusterCoreInspection...)
+			//	}
+			//
+			//	if len(allGrafanaInspections[k.ClusterName].ClusterNodeInspection) > 0 {
+			//		nodeInspections = append(nodeInspections, allGrafanaInspections[k.ClusterName].ClusterNodeInspection...)
+			//	}
+			//
+			//	if len(allGrafanaInspections[k.ClusterName].ClusterResourceInspection) > 0 {
+			//		resourceInspections = append(resourceInspections, allGrafanaInspections[k.ClusterName].ClusterResourceInspection...)
+			//	}
+			//}
 
-				if len(allGrafanaInspections[k.ClusterName].ClusterNodeInspection) > 0 {
-					nodeInspections = append(nodeInspections, allGrafanaInspections[k.ClusterName].ClusterNodeInspection...)
-				}
+			nodeInspections := GetNodeInspections(clusterNode.Nodes)
+			allNodeInspections = append(allResourceInspections, nodeInspections...)
 
-				if len(allGrafanaInspections[k.ClusterName].ClusterResourceInspection) > 0 {
-					resourceInspections = append(resourceInspections, allGrafanaInspections[k.ClusterName].ClusterResourceInspection...)
-				}
-			}
+			workloadInspections := GetWorkloadInspections(clusterResource.Workloads)
+			serviceInspections := GetServiceInspections(clusterResource.Service)
+			ingressInspections := GetIngressInspections(clusterResource.Ingress)
+			pvcInspections := GetPVCInspections(clusterResource.PVC)
+			NamespaceInspections := GetNamespaceInspections(clusterResource.Namespace)
+			pvInspections := GetPVInspections(clusterResource.PV)
+			allResourceInspections = append(allResourceInspections, workloadInspections...)
+			allResourceInspections = append(allResourceInspections, serviceInspections...)
+			allResourceInspections = append(allResourceInspections, ingressInspections...)
+			allResourceInspections = append(allResourceInspections, pvcInspections...)
+			allResourceInspections = append(allResourceInspections, NamespaceInspections...)
+			allResourceInspections = append(allResourceInspections, pvInspections...)
 
-			clusterCore.Inspections = coreInspections
-			clusterNode.Inspections = nodeInspections
-			clusterResource.Inspections = resourceInspections
+			clusterCore.Inspections = allCoreInspections
+			clusterNode.Inspections = allNodeInspections
+			clusterResource.Inspections = allResourceInspections
 
-			for _, c := range coreInspections {
+			for _, c := range allCoreInspections {
 				if c.Level > level {
 					level = c.Level
 				}
@@ -192,7 +194,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 					sendMessageDetail = append(sendMessageDetail, fmt.Sprintf("%s", c.Title))
 				}
 			}
-			for _, n := range nodeInspections {
+			for _, n := range allNodeInspections {
 				if n.Level > level {
 					level = n.Level
 				}
@@ -200,7 +202,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 					sendMessageDetail = append(sendMessageDetail, fmt.Sprintf("%s", n.Title))
 				}
 			}
-			for _, r := range resourceInspections {
+			for _, r := range allResourceInspections {
 				if r.Level > level {
 					level = r.Level
 				}
@@ -242,6 +244,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 		},
 		Kubernetes: kubernetes,
 	}
+
 	err = db.CreateReport(report)
 	if err != nil {
 		return task, inspectionFailed, fmt.Errorf("Failed to create report: %v\n", err)
@@ -296,4 +299,251 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 	task.State = "巡检完成"
 	logrus.Infof("[%s] Inspection completed for task ID: %s", task.Name, task.ID)
 	return task, "巡检完成", nil
+}
+
+func GetWorkloadInspections(workloadDatas *apis.Workload) []*apis.Inspection {
+	inspectionMap := make(map[string]*apis.Inspection)
+
+	for _, s := range workloadDatas.Deployment {
+		for _, i := range s.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("Deployment: %s / %s\n", s.Namespace, s.Name))
+			}
+		}
+	}
+
+	for _, s := range workloadDatas.Statefulset {
+		for _, i := range s.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("Statefulset: %s / %s\n", s.Namespace, s.Name))
+			}
+		}
+	}
+
+	for _, s := range workloadDatas.Deployment {
+		for _, i := range s.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("Daemonset: %s / %s\n", s.Namespace, s.Name))
+			}
+		}
+	}
+
+	for _, s := range workloadDatas.Job {
+		for _, i := range s.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("Job: %s / %s\n", s.Namespace, s.Name))
+			}
+		}
+	}
+
+	for _, s := range workloadDatas.Cronjob {
+		for _, i := range s.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("Cronjob: %s / %s\n", s.Namespace, s.Name))
+			}
+		}
+	}
+
+	var inspections []*apis.Inspection
+	for _, i := range inspectionMap {
+		inspections = append(inspections, i)
+	}
+
+	return inspections
+}
+
+func GetServiceInspections(datas []*apis.Service) []*apis.Inspection {
+	inspectionMap := make(map[string]*apis.Inspection)
+	for _, d := range datas {
+		for _, i := range d.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("%s / %s\n", d.Namespace, d.Name))
+			}
+		}
+	}
+
+	var inspections []*apis.Inspection
+	for _, i := range inspectionMap {
+		inspections = append(inspections, i)
+	}
+
+	return inspections
+}
+
+func GetIngressInspections(datas []*apis.Ingress) []*apis.Inspection {
+	inspectionMap := make(map[string]*apis.Inspection)
+	for _, d := range datas {
+		for _, i := range d.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("%s / %s\n", d.Namespace, d.Name))
+			}
+		}
+	}
+
+	var inspections []*apis.Inspection
+	for _, i := range inspectionMap {
+		inspections = append(inspections, i)
+	}
+
+	return inspections
+}
+
+func GetPVCInspections(datas []*apis.PVC) []*apis.Inspection {
+	inspectionMap := make(map[string]*apis.Inspection)
+	for _, d := range datas {
+		for _, i := range d.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("%s / %s\n", d.Namespace, d.Name))
+			}
+		}
+	}
+
+	var inspections []*apis.Inspection
+	for _, i := range inspectionMap {
+		inspections = append(inspections, i)
+	}
+
+	return inspections
+}
+
+func GetPVInspections(datas []*apis.PV) []*apis.Inspection {
+	inspectionMap := make(map[string]*apis.Inspection)
+	for _, d := range datas {
+		for _, i := range d.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("%s\n", d.Name))
+			}
+		}
+	}
+
+	var inspections []*apis.Inspection
+	for _, i := range inspectionMap {
+		inspections = append(inspections, i)
+	}
+
+	return inspections
+}
+
+func GetNamespaceInspections(datas []*apis.Namespace) []*apis.Inspection {
+	inspectionMap := make(map[string]*apis.Inspection)
+	for _, d := range datas {
+		for _, i := range d.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("%s\n", d.Name))
+			}
+		}
+	}
+
+	var inspections []*apis.Inspection
+	for _, i := range inspectionMap {
+		inspections = append(inspections, i)
+	}
+
+	return inspections
+}
+
+func GetNodeInspections(datas []*apis.Node) []*apis.Inspection {
+	inspectionMap := make(map[string]*apis.Inspection)
+	for _, d := range datas {
+		for _, i := range d.Items {
+			if !i.Pass {
+				if inspectionMap[i.Name] == nil {
+					inspectionMap[i.Name] = &apis.Inspection{
+						Title:   i.Name,
+						Message: i.Message,
+						Level:   i.Level,
+					}
+				}
+
+				inspectionMap[i.Name].Names = append(inspectionMap[i.Name].Names, fmt.Sprintf("%s / %s\n", d.Name, d.HostIP))
+			}
+		}
+	}
+
+	var inspections []*apis.Inspection
+	for _, i := range inspectionMap {
+		inspections = append(inspections, i)
+	}
+
+	return inspections
 }

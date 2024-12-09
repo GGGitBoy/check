@@ -330,8 +330,12 @@ func NotifyUser(appID, appSecret, mobiles, emails, taskName string) error {
 	}
 
 	var UserIdList []*string
-	for _, u := range getIdUserResp.Data.UserList {
-		UserIdList = append(UserIdList, u.UserId)
+	if getIdUserResp.Data != nil && len(getIdUserResp.Data.UserList) > 0 {
+		for _, u := range getIdUserResp.Data.UserList {
+			if u.UserId != nil {
+				UserIdList = append(UserIdList, u.UserId)
+			}
+		}
 	}
 
 	for _, userId := range UserIdList {
@@ -345,7 +349,7 @@ func NotifyUser(appID, appSecret, mobiles, emails, taskName string) error {
 			Build()
 
 		// 发起请求
-		createMessageResp, err := client.Im.Message.Create(context.Background(), createMessageReq)
+		createMessageResp, err := client.Im.Message.Create(context.Background(), createMessageReq, requestOptionFunc)
 		if err != nil {
 			logrus.Errorf("Failed to get user ID: %v", err)
 			return fmt.Errorf("Failed to get user ID: %v\n", err)

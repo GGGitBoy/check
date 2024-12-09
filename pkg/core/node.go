@@ -7,14 +7,14 @@ import (
 	"github.com/sirupsen/logrus"
 	"inspection-server/pkg/apis"
 	"inspection-server/pkg/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, taskName string, nodeItem map[string][]*apis.Item) ([]*apis.Node, []*apis.Inspection, error) {
+func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, taskName string, nodeItem map[string][]*apis.Item) ([]*apis.Node, error) {
 	logrus.Infof("[%s] Starting node inspection", taskName)
 	nodeNodeArray := apis.NewNodes()
-	nodeInspections := apis.NewInspections()
 
 	if clusterNodeConfig.Enable {
 		nodes := make(map[string][]*apis.CommandConfig)
@@ -28,7 +28,7 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 
 			nodeList, err := client.Clientset.CoreV1().Nodes().List(context.TODO(), listOptions)
 			if err != nil {
-				return nil, nil, fmt.Errorf("Failed to list nodes : %v\n", err)
+				return nil, fmt.Errorf("Failed to list nodes : %v\n", err)
 			}
 
 			for _, i := range nodeList.Items {
@@ -39,13 +39,13 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 		podSet := labels.Set(map[string]string{"name": "inspection-agent"})
 		podList, err := client.Clientset.CoreV1().Pods(common.InspectionNamespace).List(context.TODO(), metav1.ListOptions{LabelSelector: podSet.String()})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing pods in namespace %s: %v\n", common.InspectionNamespace, err)
+			return nil, fmt.Errorf("Error listing pods in namespace %s: %v\n", common.InspectionNamespace, err)
 		}
 
 		for _, pod := range podList.Items {
 			node, err := client.Clientset.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
 			if err != nil {
-				return nil, nil, fmt.Errorf("Error getting node %s: %v\n", pod.Spec.NodeName, err)
+				return nil, fmt.Errorf("Error getting node %s: %v\n", pod.Spec.NodeName, err)
 			}
 
 			podLimits := getResourceList(node.Annotations["management.cattle.io/pod-limits"])
@@ -65,7 +65,6 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 			if float64(limitsCPU)/float64(allocatableCPU) > 0.8 {
 				highLimitsCPU = false
 				highLimitsCPUMessage = fmt.Sprintf("节点 %s limits CPU 超过百分之 80", pod.Spec.NodeName)
-				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Limits CPU", pod.Spec.NodeName), fmt.Sprintf("节点 %s limits CPU 超过百分之 80", pod.Spec.NodeName), 2, []string{}))
 				logrus.Infof("[%s] Node %s High Limits CPU: limits CPU %d, allocatable CPU %d", taskName, pod.Spec.NodeName, limitsCPU, allocatableCPU)
 			}
 
@@ -74,7 +73,6 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 			if float64(limitsMemory)/float64(allocatableMemory) > 0.8 {
 				highLimitsMemory = false
 				highLimitsMemoryMessage = fmt.Sprintf("节点 %s limits Memory 超过百分之 80", pod.Spec.NodeName)
-				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Limits Memory", pod.Spec.NodeName), fmt.Sprintf("节点 %s limits Memory 超过百分之 80", pod.Spec.NodeName), 2, []string{}))
 				logrus.Infof("[%s] Node %s High Limits Memory: limits Memory %d, allocatable Memory %d", taskName, pod.Spec.NodeName, limitsMemory, allocatableMemory)
 			}
 
@@ -83,7 +81,6 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 			if float64(requestsCPU)/float64(allocatableCPU) > 0.8 {
 				highRequestsCPU = false
 				highRequestsCPUMessage = fmt.Sprintf("节点 %s requests CPU 超过百分之 80", pod.Spec.NodeName)
-				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests CPU", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests CPU 超过百分之 80", pod.Spec.NodeName), 2, []string{}))
 				logrus.Infof("[%s] Node %s High Requests CPU: requests CPU %d, allocatable CPU %d", taskName, pod.Spec.NodeName, requestsCPU, allocatableCPU)
 			}
 
@@ -92,7 +89,6 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 			if float64(requestsMemory)/float64(allocatableMemory) > 0.8 {
 				highRequestsMemory = false
 				highRequestsMemoryMessage = fmt.Sprintf("节点 %s requests Memory 超过百分之 80", pod.Spec.NodeName)
-				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests Memory", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests Memory 超过百分之 80", pod.Spec.NodeName), 2, []string{}))
 				logrus.Infof("[%s] Node %s High Requests Memory: requests Memory %d, allocatable Memory %d", taskName, pod.Spec.NodeName, requestsMemory, allocatableMemory)
 			}
 
@@ -101,7 +97,6 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 			if float64(requestsPods)/float64(allocatablePods) > 0.8 {
 				highRequestsPods = false
 				highRequestsPodsMessage = fmt.Sprintf("节点 %s requests Pods 超过百分之 80", pod.Spec.NodeName)
-				nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s High Requests Pods", pod.Spec.NodeName), fmt.Sprintf("节点 %s requests Pods 超过百分之 80", pod.Spec.NodeName), 2, []string{}))
 				logrus.Infof("[%s] Node %s High Requests Pods: requests Pods %d, allocatable Pods %d", taskName, pod.Spec.NodeName, requestsPods, allocatablePods)
 			}
 
@@ -117,7 +112,7 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 			command := "/opt/inspection/inspection.sh"
 			stdout, stderr, err := ExecToPodThroughAPI(client.Clientset, client.Config, command, commands, pod.Namespace, pod.Name, "inspection-agent-container", taskName)
 			if err != nil {
-				return nil, nil, fmt.Errorf("Error executing command in pod %s: %v\n", pod.Name, err)
+				return nil, fmt.Errorf("Error executing command in pod %s: %v\n", pod.Name, err)
 			}
 
 			if stderr != "" {
@@ -127,7 +122,7 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 			var results []apis.CommandCheckResult
 			err = json.Unmarshal([]byte(stdout), &results)
 			if err != nil {
-				return nil, nil, fmt.Errorf("Error unmarshalling stdout for pod %s: %v\n", pod.Name, err)
+				return nil, fmt.Errorf("Error unmarshalling stdout for pod %s: %v\n", pod.Name, err)
 			}
 
 			items := []*apis.Item{
@@ -135,26 +130,31 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 					Name:    "Limits CPU 超过 80 %",
 					Message: highLimitsCPUMessage,
 					Pass:    highLimitsCPU,
+					Level:   2,
 				},
 				{
 					Name:    "Limits Memory 超过 80 %",
 					Message: highLimitsMemoryMessage,
 					Pass:    highLimitsMemory,
+					Level:   2,
 				},
 				{
 					Name:    "Requests CPU 超过 80 %",
 					Message: highRequestsCPUMessage,
 					Pass:    highRequestsCPU,
+					Level:   2,
 				},
 				{
 					Name:    "Requests Memory 超过 80 %",
 					Message: highRequestsMemoryMessage,
 					Pass:    highRequestsMemory,
+					Level:   2,
 				},
 				{
 					Name:    "Requests Pods 超过 80 %",
 					Message: highRequestsPodsMessage,
 					Pass:    highRequestsPods,
+					Level:   2,
 				},
 			}
 
@@ -164,7 +164,6 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 				if r.Error != "" {
 					commandCheck = false
 					commandCheckMessage = fmt.Sprintf("%s", r.Error)
-					nodeInspections = append(nodeInspections, apis.NewInspection(fmt.Sprintf("Node %s (%s)", pod.Spec.NodeName, r.Description), fmt.Sprintf("%s", r.Error), 2, []string{}))
 					logrus.Errorf("Node %s inspection failed (%s): %s", pod.Spec.NodeName, r.Description, r.Error)
 				}
 
@@ -172,6 +171,7 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 					Name:    r.Description,
 					Message: commandCheckMessage,
 					Pass:    commandCheck,
+					Level:   2,
 				})
 			}
 
@@ -179,6 +179,8 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 			if ok {
 				items = append(items, grafanaItem...)
 			}
+
+			itemsCount := GetItemsCount(items)
 
 			nodeData := &apis.Node{
 				Name:   pod.Spec.NodeName,
@@ -197,12 +199,24 @@ func GetNodes(client *apis.Client, clusterNodeConfig *apis.ClusterNodeConfig, ta
 				//	Stdout: results,
 				//	Stderr: stderr,
 				//},
-				Items: items,
+				Items:      items,
+				ItemsCount: itemsCount,
 			}
 
 			nodeNodeArray = append(nodeNodeArray, nodeData)
 		}
 	}
 
-	return nodeNodeArray, nodeInspections, nil
+	return nodeNodeArray, nil
+}
+
+func getResourceList(val string) corev1.ResourceList {
+	if val == "" {
+		return nil
+	}
+	result := corev1.ResourceList{}
+	if err := json.Unmarshal([]byte(val), &result); err != nil {
+		return corev1.ResourceList{}
+	}
+	return result
 }

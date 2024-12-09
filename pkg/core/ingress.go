@@ -11,10 +11,9 @@ import (
 	"strings"
 )
 
-func GetIngress(client *apis.Client, ingressConfig *apis.IngressConfig, taskName string, ingressItem map[string][]*apis.Item) ([]*apis.Ingress, []*apis.Inspection, error) {
+func GetIngress(client *apis.Client, ingressConfig *apis.IngressConfig, taskName string, ingressItem map[string][]*apis.Item) ([]*apis.Ingress, error) {
 	logrus.Infof("[%s] Starting ingresses inspection", taskName)
 
-	resourceInspections := apis.NewInspections()
 	ingress := apis.NewIngress()
 
 	selectorNamespaces := []string{""}
@@ -33,7 +32,7 @@ func GetIngress(client *apis.Client, ingressConfig *apis.IngressConfig, taskName
 	for _, ns := range selectorNamespaces {
 		ingressList, err := client.Clientset.NetworkingV1().Ingresses(ns).List(context.TODO(), listOptions)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing pvc: %v\n", err)
+			return nil, fmt.Errorf("Error listing pvc: %v\n", err)
 		}
 
 		allIngress = append(allIngress, ingressList.Items...)
@@ -78,13 +77,16 @@ func GetIngress(client *apis.Client, ingressConfig *apis.IngressConfig, taskName
 			items = append(items, grafanaItem...)
 		}
 
+		itemsCount := GetItemsCount(items)
+
 		ingress = append(ingress, &apis.Ingress{
-			Name:      i.Name,
-			Namespace: i.Namespace,
-			Items:     items,
+			Name:       i.Name,
+			Namespace:  i.Namespace,
+			Items:      items,
+			ItemsCount: itemsCount,
 		})
 	}
 
 	logrus.Infof("[%s] Completed getting ingresses", taskName)
-	return ingress, resourceInspections, nil
+	return ingress, nil
 }

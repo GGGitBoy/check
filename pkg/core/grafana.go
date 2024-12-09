@@ -9,6 +9,7 @@ import (
 	"inspection-server/pkg/common"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -87,15 +88,15 @@ type Rule struct {
 	EvaluationTime float64   `json:"evaluationTime"`
 }
 
-type AllGrafanaInspection struct {
-	GrafanaInspections map[string]*GrafanaInspection `json:"grafana_inspections"`
-}
-
-type GrafanaInspection struct {
-	ClusterCoreInspection     []*apis.Inspection `json:"cluster_core_inspection"`
-	ClusterNodeInspection     []*apis.Inspection `json:"cluster_node_inspection"`
-	ClusterResourceInspection []*apis.Inspection `json:"cluster_resource_inspection"`
-}
+//type AllGrafanaInspection struct {
+//	GrafanaInspections map[string]*GrafanaInspection `json:"grafana_inspections"`
+//}
+//
+//type GrafanaInspection struct {
+//	ClusterCoreInspection     []*apis.Inspection `json:"cluster_core_inspection"`
+//	ClusterNodeInspection     []*apis.Inspection `json:"cluster_node_inspection"`
+//	ClusterResourceInspection []*apis.Inspection `json:"cluster_resource_inspection"`
+//}
 
 type AllGrafanaItems struct {
 	GrafanaItems map[string]*GrafanaItem `json:"grafana_items"`
@@ -161,18 +162,6 @@ func NewGrafanaItem() *GrafanaItem {
 	}
 }
 
-func NewAllGrafanaInspection() map[string]*GrafanaInspection {
-	return make(map[string]*GrafanaInspection)
-}
-
-func NewGrafanaInspection() *GrafanaInspection {
-	return &GrafanaInspection{
-		ClusterCoreInspection:     []*apis.Inspection{},
-		ClusterNodeInspection:     []*apis.Inspection{},
-		ClusterResourceInspection: []*apis.Inspection{},
-	}
-}
-
 func NewAlerting() *Alerting {
 	return &Alerting{}
 }
@@ -228,13 +217,25 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 					continue
 				}
 
+				levelAnnotation, ok := alert.Annotations["level"]
+				if !ok {
+					logrus.Errorf("Alert %s missing 'kind' annotation", rule.Name)
+					continue
+				}
+
+				level, err := strconv.Atoi(levelAnnotation)
+				if err != nil {
+					logrus.Errorf("Alert %s 'level' annotation is not int", rule.Name)
+					continue
+				}
+
 				if allGrafanaItems[prometheusFrom] == nil {
 					allGrafanaItems[prometheusFrom] = NewGrafanaItem()
 				}
 
 				if group.Name == "inspection-cluster" {
 					if kind == "cluster" {
-						allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom] = append(allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom], apis.NewItem(alertname, message, pass))
+						allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom] = append(allGrafanaItems[prometheusFrom].ClusterCoreItem.ClusterItem[prometheusFrom], apis.NewItem(alertname, message, pass, level))
 					}
 				} else if group.Name == "inspection-node" {
 					if kind == "node" {
@@ -245,7 +246,7 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 						}
 						nodeIP := strings.Split(instance, ":")[0]
 
-						allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP] = append(allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP], apis.NewItem(alertname, message, pass))
+						allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP] = append(allGrafanaItems[prometheusFrom].ClusterNodeItem.NodeItem[nodeIP], apis.NewItem(alertname, message, pass, level))
 					}
 				} else if group.Name == "inspection-resource" {
 					if kind == "workload" {
@@ -272,15 +273,15 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 							workloadName := createdByName[:index]
 							workloadNamespaceName := namespace + "/" + workloadName
 
-							allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName], apis.NewItem(alertname, message, pass))
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DeploymentItem[workloadNamespaceName], apis.NewItem(alertname, message, pass, level))
 						} else if createdByKind == "StatefulSet" {
 							workloadNamespaceName := namespace + "/" + createdByName
 
-							allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName], apis.NewItem(alertname, message, pass))
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.StatefulsetItem[workloadNamespaceName], apis.NewItem(alertname, message, pass, level))
 						} else if createdByKind == "DaemonSet" {
 							workloadNamespaceName := namespace + "/" + createdByName
 
-							allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName], apis.NewItem(alertname, message, pass))
+							allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.DaemonsetItem[workloadNamespaceName], apis.NewItem(alertname, message, pass, level))
 						}
 					} else if kind == "pvc" {
 						namespace, ok := alert.Labels["namespace"]
@@ -296,7 +297,7 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 						}
 						pvcNamespaceName := namespace + "/" + persistentvolumeclaim
 
-						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName], apis.NewItem(alertname, message, pass))
+						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVCItems[pvcNamespaceName], apis.NewItem(alertname, message, pass, level))
 					} else if kind == "pv" {
 						persistentvolume, ok := alert.Labels["persistentvolume"]
 						if !ok {
@@ -304,7 +305,7 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 							continue
 						}
 
-						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume], apis.NewItem(alertname, message, pass))
+						allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.PVItems[persistentvolume], apis.NewItem(alertname, message, pass, level))
 					} else if kind == "namespace" {
 						namespace, ok := alert.Labels["namespace"]
 						if !ok {
@@ -318,7 +319,7 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 							continue
 						}
 
-						allGrafanaItems[prometheusFrom].ClusterResourceItem.NamespaceItem[namespace] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.NamespaceItem[namespace], apis.NewItem(alertname+" - "+resource, message, pass))
+						allGrafanaItems[prometheusFrom].ClusterResourceItem.NamespaceItem[namespace] = append(allGrafanaItems[prometheusFrom].ClusterResourceItem.NamespaceItem[namespace], apis.NewItem(alertname+" - "+resource, message, pass, level))
 					}
 				}
 			}
@@ -331,71 +332,6 @@ func GetAllGrafanaItems(taskName string) (map[string]*GrafanaItem, error) {
 	logrus.Infof("[%s] Completed getting all Grafana items", taskName)
 
 	return allGrafanaItems, nil
-}
-
-func GetAllGrafanaInspections(taskName string) (map[string]*GrafanaInspection, error) {
-	logrus.Infof("[%s] Starting to get all Grafana inspections", taskName)
-
-	allGrafanaInspection := NewAllGrafanaInspection()
-
-	alerting, err := GetAlerting()
-	if err != nil {
-		return nil, fmt.Errorf("Error getting alerting data: %v\n", err)
-	}
-
-	if alerting == nil || alerting.Data == nil || len(alerting.Data.RuleGroups) == 0 {
-		return nil, fmt.Errorf("alerting rule is empty: %v", err)
-	}
-
-	for _, group := range alerting.Data.RuleGroups {
-		for _, rule := range group.Rules {
-			if rule.State == "firing" || rule.State == "pending" {
-				for _, alert := range rule.Alerts {
-					if alert.State == "Alerting" || alert.State == "pending" {
-						prometheusFrom, ok := alert.Labels["prometheus_from"]
-						if !ok {
-							logrus.Errorf("Alert %s missing 'prometheus_from' label", rule.Name)
-							continue
-						}
-
-						alertname, ok := alert.Labels["alertname"]
-						if !ok {
-							logrus.Errorf("Alert %s missing 'alertname' label", rule.Name)
-							continue
-						}
-
-						summary, ok := alert.Annotations["summary"]
-						if !ok {
-							logrus.Errorf("Alert %s missing 'summary' annotation", rule.Name)
-							continue
-						}
-
-						if allGrafanaInspection[prometheusFrom] == nil {
-							allGrafanaInspection[prometheusFrom] = NewGrafanaInspection()
-						}
-
-						if group.Name == "inspection-cluster" {
-							allGrafanaInspection[prometheusFrom].ClusterCoreInspection = append(allGrafanaInspection[prometheusFrom].ClusterCoreInspection, apis.NewInspection(fmt.Sprintf("%s : %s", alertname, prometheusFrom), fmt.Sprintf("%s %s", prometheusFrom, summary), 2, []string{}))
-						} else if group.Name == "inspection-node" {
-							instance, ok := alert.Labels["instance"]
-							if !ok {
-								logrus.Errorf("Alert %s missing 'instance' label", rule.Name)
-								continue
-							}
-							result := strings.Split(instance, ":")[0]
-
-							allGrafanaInspection[prometheusFrom].ClusterNodeInspection = append(allGrafanaInspection[prometheusFrom].ClusterNodeInspection, apis.NewInspection(fmt.Sprintf("%s : %s : %s", alertname, prometheusFrom, result), fmt.Sprintf("%s %s %s", prometheusFrom, result, summary), 2, []string{}))
-						} else if group.Name == "inspection-resource" {
-							allGrafanaInspection[prometheusFrom].ClusterResourceInspection = append(allGrafanaInspection[prometheusFrom].ClusterResourceInspection, apis.NewInspection(fmt.Sprintf("%s : %s", alertname, prometheusFrom), fmt.Sprintf("%s %s", prometheusFrom, summary), 2, []string{}))
-						}
-					}
-				}
-			}
-		}
-	}
-
-	logrus.Infof("[%s] Completed getting all Grafana inspections", taskName)
-	return allGrafanaInspection, nil
 }
 
 func GetAlerting() (*Alerting, error) {

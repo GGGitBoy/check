@@ -11,10 +11,9 @@ import (
 	"strings"
 )
 
-func GetPVC(client *apis.Client, pvcConfig *apis.PVCConfig, taskName string, pvcItem map[string][]*apis.Item) ([]*apis.PVC, []*apis.Inspection, error) {
+func GetPVC(client *apis.Client, pvcConfig *apis.PVCConfig, taskName string, pvcItem map[string][]*apis.Item) ([]*apis.PVC, error) {
 	logrus.Infof("[%s] Starting pvc inspection", taskName)
 
-	resourceInspections := apis.NewInspections()
 	pvcs := apis.NewPVCs()
 
 	selectorNamespaces := []string{""}
@@ -33,7 +32,7 @@ func GetPVC(client *apis.Client, pvcConfig *apis.PVCConfig, taskName string, pvc
 	for _, ns := range selectorNamespaces {
 		pvcList, err := client.Clientset.CoreV1().PersistentVolumeClaims(ns).List(context.TODO(), listOptions)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing pvc: %v\n", err)
+			return nil, fmt.Errorf("Error listing pvc: %v\n", err)
 		}
 
 		allPVC = append(allPVC, pvcList.Items...)
@@ -46,13 +45,16 @@ func GetPVC(client *apis.Client, pvcConfig *apis.PVCConfig, taskName string, pvc
 			items = append(items, grafanaItem...)
 		}
 
+		itemsCount := GetItemsCount(items)
+
 		pvcs = append(pvcs, &apis.PVC{
-			Name:      p.Name,
-			Namespace: p.Namespace,
-			Items:     items,
+			Name:       p.Name,
+			Namespace:  p.Namespace,
+			Items:      items,
+			ItemsCount: itemsCount,
 		})
 	}
 
 	logrus.Infof("[%s] Completed getting pvc", taskName)
-	return pvcs, resourceInspections, nil
+	return pvcs, nil
 }

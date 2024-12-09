@@ -26,7 +26,6 @@ RUN ls /usr/share/zoneinfo/Asia/Shanghai
 # 将应用程序和测试文件复制到镜像中
 COPY bin/inspection-server /inspection-server
 COPY package/test.pdf /opt/test.pdf
-COPY agent/yaml /opt/yaml
 
 # 指定容器启动时运行的命令
 CMD ["/inspection-server"]

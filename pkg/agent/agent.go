@@ -49,7 +49,7 @@ func Register() error {
 			continue
 		}
 
-		err = CreateAgent(kubernetesClient.Clientset)
+		err = CreateAgent(kubernetesClient.Clientset, c.GetName())
 		if err != nil {
 			logrus.Errorf("Failed to create agent for cluster %s: %v", c.GetName(), err)
 			continue
@@ -61,7 +61,7 @@ func Register() error {
 	return nil
 }
 
-func CreateAgent(clientset *kubernetes.Clientset) error {
+func CreateAgent(clientset *kubernetes.Clientset, clusterName string) error {
 	logrus.Infof("[Agent] Creating inspection agent resources")
 
 	if err := ApplyNamespace(clientset); err != nil {
@@ -84,7 +84,7 @@ func CreateAgent(clientset *kubernetes.Clientset) error {
 		return err
 	}
 
-	if err := ApplyDaemonSet(clientset); err != nil {
+	if err := ApplyDaemonSet(clientset, clusterName); err != nil {
 		logrus.Errorf("Failed to apply daemon set: %v", err)
 		return err
 	}
@@ -189,7 +189,7 @@ func ApplyConfigMap(clientset *kubernetes.Clientset) error {
 	return nil
 }
 
-func ApplyDaemonSet(clientset *kubernetes.Clientset) error {
+func ApplyDaemonSet(clientset *kubernetes.Clientset, clusterName string) error {
 	logrus.Infof("[Agent] Applying daemon set configuration")
 
 	provider, err := detector.DetectProvider(context.TODO(), clientset)
@@ -208,7 +208,12 @@ func ApplyDaemonSet(clientset *kubernetes.Clientset) error {
 		logrus.Warnf("Unknown provider detected: %s", provider)
 	}
 
-	tmpl, err := template.ParseFiles(common.AgentYamlPath + "daemonset.yaml")
+	agentYamlPath := common.AgentYamlPath + "daemonset.yaml"
+	if common.FileExists(common.AgentYamlPath + fmt.Sprintf("%s-daemonset.yaml", clusterName)) {
+		agentYamlPath = common.AgentYamlPath + fmt.Sprintf("%s-daemonset.yaml", clusterName)
+	}
+
+	tmpl, err := template.ParseFiles(agentYamlPath)
 	if err != nil {
 		logrus.Errorf("Failed to parse daemon set template: %v", err)
 		return err

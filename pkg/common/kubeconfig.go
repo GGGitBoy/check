@@ -24,6 +24,12 @@ var (
 		Version:  "v3",
 		Resource: "clusters",
 	}
+
+	AppRes = schema.GroupVersionResource{
+		Group:    "catalog.cattle.io",
+		Version:  "v1",
+		Resource: "apps",
+	}
 )
 
 type KubeConfig struct {

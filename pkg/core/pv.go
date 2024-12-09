@@ -9,10 +9,9 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func GetPV(client *apis.Client, pvConfig *apis.PVConfig, taskName string, pvItem map[string][]*apis.Item) ([]*apis.PV, []*apis.Inspection, error) {
+func GetPV(client *apis.Client, pvConfig *apis.PVConfig, taskName string, pvItem map[string][]*apis.Item) ([]*apis.PV, error) {
 	logrus.Infof("[%s] Starting pv inspection", taskName)
 
-	resourceInspections := apis.NewInspections()
 	pvs := apis.NewPVs()
 
 	listOptions := metav1.ListOptions{}
@@ -24,7 +23,7 @@ func GetPV(client *apis.Client, pvConfig *apis.PVConfig, taskName string, pvItem
 
 	pvList, err := client.Clientset.CoreV1().PersistentVolumes().List(context.TODO(), listOptions)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error listing pv: %v\n", err)
+		return nil, fmt.Errorf("Error listing pv: %v\n", err)
 	}
 
 	for _, p := range pvList.Items {
@@ -34,12 +33,15 @@ func GetPV(client *apis.Client, pvConfig *apis.PVConfig, taskName string, pvItem
 			items = append(items, grafanaItem...)
 		}
 
+		itemsCount := GetItemsCount(items)
+
 		pvs = append(pvs, &apis.PV{
-			Name:  p.Name,
-			Items: items,
+			Name:       p.Name,
+			Items:      items,
+			ItemsCount: itemsCount,
 		})
 	}
 
 	logrus.Infof("[%s] Completed getting pv", taskName)
-	return pvs, resourceInspections, nil
+	return pvs, nil
 }

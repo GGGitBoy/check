@@ -10,10 +10,9 @@ import (
 	"strings"
 )
 
-func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName string, nsItem map[string][]*apis.Item) ([]*apis.Namespace, []*apis.Inspection, error) {
+func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName string, nsItem map[string][]*apis.Item) ([]*apis.Namespace, error) {
 	logrus.Infof("[%s] Starting namespaces inspection", taskName)
 
-	resourceInspections := apis.NewInspections()
 	namespaces := apis.NewNamespaces()
 
 	listOptions := metav1.ListOptions{}
@@ -25,7 +24,7 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 
 	namespaceList, err := client.Clientset.CoreV1().Namespaces().List(context.TODO(), listOptions)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error listing namespaces: %v\n", err)
+		return nil, fmt.Errorf("Error listing namespaces: %v\n", err)
 	}
 
 	for _, n := range namespaceList.Items {
@@ -38,63 +37,57 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 
 		podList, err := client.Clientset.CoreV1().Pods(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing pods in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing pods in namespace %s: %v\n", n.Name, err)
 		}
 
 		serviceList, err := client.Clientset.CoreV1().Services(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing services in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing services in namespace %s: %v\n", n.Name, err)
 		}
 
 		deploymentList, err := client.Clientset.AppsV1().Deployments(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing deployments in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing deployments in namespace %s: %v\n", n.Name, err)
 		}
 
 		replicaSetList, err := client.Clientset.AppsV1().ReplicaSets(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing replica sets in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing replica sets in namespace %s: %v\n", n.Name, err)
 		}
 
 		statefulSetList, err := client.Clientset.AppsV1().StatefulSets(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing stateful sets in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing stateful sets in namespace %s: %v\n", n.Name, err)
 		}
 
 		daemonSetList, err := client.Clientset.AppsV1().DaemonSets(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing daemon sets in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing daemon sets in namespace %s: %v\n", n.Name, err)
 		}
 
 		jobList, err := client.Clientset.BatchV1().Jobs(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing jobs in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing jobs in namespace %s: %v\n", n.Name, err)
 		}
 
 		secretList, err := client.Clientset.CoreV1().Secrets(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing secrets in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing secrets in namespace %s: %v\n", n.Name, err)
 		}
 
 		configMapList, err := client.Clientset.CoreV1().ConfigMaps(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing config maps in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing config maps in namespace %s: %v\n", n.Name, err)
 		}
 
 		resourceQuotaList, err := client.Clientset.CoreV1().ResourceQuotas(n.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing resource quotas in namespace %s: %v\n", n.Name, err)
+			return nil, fmt.Errorf("Error listing resource quotas in namespace %s: %v\n", n.Name, err)
 		}
 
 		if len(resourceQuotaList.Items) == 0 {
 			emptyResourceQuota = false
 			emptyResourceQuotaMessage = fmt.Sprintf("命名空间 %s 没有设置配额", n.Name)
-			resourceInspections = append(resourceInspections, apis.NewInspection(
-				fmt.Sprintf("命名空间 %s 没有设置配额", n.Name),
-				"未设置资源配额",
-				1,
-				[]string{},
-			))
 		}
 
 		totalResources := len(podList.Items) + len(serviceList.Items) + len(deploymentList.Items) +
@@ -104,12 +97,6 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 		if totalResources == 0 {
 			emptyResource = false
 			emptyResourceMessage = fmt.Sprintf("命名空间 %s 下资源为空", n.Name)
-			resourceInspections = append(resourceInspections, apis.NewInspection(
-				fmt.Sprintf("命名空间 %s 下资源为空", n.Name),
-				"检查对象为 Pod、Service、Deployment、Replicaset、Statefulset、Daemonset、Job、Secret、ConfigMap",
-				1,
-				[]string{},
-			))
 		}
 
 		items := []*apis.Item{
@@ -117,11 +104,13 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 				Name:    "有资源配置设置",
 				Message: emptyResourceQuotaMessage,
 				Pass:    emptyResourceQuota,
+				Level:   1,
 			},
 			{
 				Name:    "命名空间下资源非空",
 				Message: emptyResourceMessage,
 				Pass:    emptyResource,
+				Level:   1,
 			},
 		}
 
@@ -161,6 +150,8 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 			items = append(items, grafanaItem...)
 		}
 
+		itemsCount := GetItemsCount(items)
+
 		namespaces = append(namespaces, &apis.Namespace{
 			Name:             n.Name,
 			PodCount:         len(podList.Items),
@@ -173,20 +164,12 @@ func GetNamespaces(client *apis.Client, nsConfig *apis.NamespaceConfig, taskName
 			SecretCount:      len(secretList.Items),
 			ConfigMapCount:   len(configMapList.Items) - 1,
 			Items:            items,
+			ItemsCount:       itemsCount,
 		})
 
 		logrus.Debugf("Processed namespace: %s", n.Name)
 	}
 
 	logrus.Infof("[%s] Completed namespace retrieval", taskName)
-	return namespaces, resourceInspections, nil
-}
-
-func Contains(slice []string, str string) bool {
-	for _, s := range slice {
-		if s == str {
-			return true
-		}
-	}
-	return false
+	return namespaces, nil
 }

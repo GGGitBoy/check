@@ -12,10 +12,9 @@ import (
 	"strings"
 )
 
-func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskName string, serviceItem map[string][]*apis.Item) ([]*apis.Service, []*apis.Inspection, error) {
+func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskName string, serviceItem map[string][]*apis.Item) ([]*apis.Service, error) {
 	logrus.Infof("[%s] Starting services inspection", taskName)
 
-	resourceInspections := apis.NewInspections()
 	services := apis.NewServices()
 
 	selectorNamespaces := []string{""}
@@ -34,7 +33,7 @@ func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskNam
 	for _, ns := range selectorNamespaces {
 		serviceList, err := client.Clientset.CoreV1().Services(ns).List(context.TODO(), listOptions)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error listing pvc: %v\n", err)
+			return nil, fmt.Errorf("Error listing pvc: %v\n", err)
 		}
 
 		allService = append(allService, serviceList.Items...)
@@ -50,12 +49,6 @@ func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskNam
 				emptyEndpoints = false
 				emptyEndpointsMessage = fmt.Sprintf("命名空间 %s 下 Service %s 找不到对应 endpoint", s.Namespace, s.Name)
 				logrus.Warnf("Service %s/%s does not have corresponding endpoints", s.Namespace, s.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(
-					fmt.Sprintf("命名空间 %s 下 Service %s 找不到对应 endpoint", s.Namespace, s.Name),
-					"对应的 Endpoints 未找到",
-					1,
-					[]string{},
-				))
 
 				services = append(services, &apis.Service{
 					Name:      s.Name,
@@ -65,6 +58,7 @@ func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskNam
 							Name:    "存在对应 Endpoints 且 Subsets 非空",
 							Message: emptyEndpointsMessage,
 							Pass:    emptyEndpoints,
+							Level:   1,
 						},
 					},
 				})
@@ -76,12 +70,6 @@ func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskNam
 		if len(endpoints.Subsets) == 0 {
 			emptyEndpoints = false
 			emptyEndpointsMessage = fmt.Sprintf("命名空间 %s 下 Service %s 对应 Endpoints 没有 Subsets", s.Namespace, s.Name)
-			resourceInspections = append(resourceInspections, apis.NewInspection(
-				fmt.Sprintf("命名空间 %s 下 Service %s 对应 Endpoints 没有 Subsets", s.Namespace, s.Name),
-				"对应的 Endpoints 没有 Subsets",
-				1,
-				[]string{},
-			))
 		}
 
 		items := []*apis.Item{
@@ -89,6 +77,7 @@ func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskNam
 				Name:    "存在对应 Endpoints 且 Subsets 非空",
 				Message: emptyEndpointsMessage,
 				Pass:    emptyEndpoints,
+				Level:   1,
 			},
 		}
 
@@ -97,13 +86,16 @@ func GetServices(client *apis.Client, serviceConfig *apis.ServiceConfig, taskNam
 			items = append(items, grafanaItem...)
 		}
 
+		itemsCount := GetItemsCount(items)
+
 		services = append(services, &apis.Service{
-			Name:      s.Name,
-			Namespace: s.Namespace,
-			Items:     items,
+			Name:       s.Name,
+			Namespace:  s.Namespace,
+			Items:      items,
+			ItemsCount: itemsCount,
 		})
 	}
 
 	logrus.Infof("[%s] Completed getting services", taskName)
-	return services, resourceInspections, nil
+	return services, nil
 }

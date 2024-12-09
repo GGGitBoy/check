@@ -13,11 +13,10 @@ import (
 	"strings"
 )
 
-func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, taskName string, clusterResourceItem *ClusterResourceItem) (*apis.Workload, []*apis.Inspection, error) {
+func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, taskName string, clusterResourceItem *ClusterResourceItem) (*apis.Workload, error) {
 	logrus.Infof("[%s] Starting workload inspection", taskName)
 
 	ResourceWorkloadArray := apis.NewWorkload()
-	resourceInspections := apis.NewInspections()
 
 	if workloadConfig.Deployment.Enable {
 		selectorNamespaces := []string{""}
@@ -36,7 +35,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 		for _, ns := range selectorNamespaces {
 			deploymentList, err := client.Clientset.AppsV1().Deployments(ns).List(context.TODO(), listOptions)
 			if err != nil {
-				return nil, nil, fmt.Errorf("Error listing Deployment: %v\n", err)
+				return nil, fmt.Errorf("Error listing Deployment: %v\n", err)
 			}
 
 			allDeployment = append(allDeployment, deploymentList.Items...)
@@ -50,7 +49,6 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 			if !isDeploymentAvailable(&deploy) {
 				deployHealth = false
 				deployHealthMessage = fmt.Sprintf("命名空间 %s 下的 Deployment %s 处于非健康状态", deploy.Namespace, deploy.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Deployment %s 警告", deploy.Name), fmt.Sprintf("命名空间 %s 下的 Deployment %s 处于非健康状态", deploy.Namespace, deploy.Name), defaultLevel(1), []string{}))
 			}
 
 			var condition []apis.Condition
@@ -73,6 +71,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				Name:    "健康状态",
 				Message: deployHealthMessage,
 				Pass:    deployHealth,
+				Level:   1,
 			})
 
 			checkContainersProbeItem := CheckContainersProbe(deploy.Spec.Template.Spec.Containers)
@@ -83,6 +82,8 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				items = append(items, grafanaItem...)
 			}
 
+			itemsCount := GetItemsCount(items)
+
 			deploymentData := &apis.WorkloadData{
 				Name:      deploy.Name,
 				Namespace: deploy.Namespace,
@@ -90,7 +91,8 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				Status: &apis.Status{
 					Condition: condition,
 				},
-				Items: items,
+				Items:      items,
+				ItemsCount: itemsCount,
 			}
 
 			ResourceWorkloadArray.Deployment = append(ResourceWorkloadArray.Deployment, deploymentData)
@@ -114,7 +116,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 		for _, ns := range selectorNamespaces {
 			daemonSetList, err := client.Clientset.AppsV1().DaemonSets(ns).List(context.TODO(), listOptions)
 			if err != nil {
-				return nil, nil, fmt.Errorf("Error listing DaemonSets: %v\n", err)
+				return nil, fmt.Errorf("Error listing DaemonSets: %v\n", err)
 			}
 
 			allDaemonSets = append(allDaemonSets, daemonSetList.Items...)
@@ -128,7 +130,6 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 			if !isDaemonSetAvailable(&ds) {
 				dsHealth = false
 				dsHealthMessage = fmt.Sprintf("命名空间 %s 下的 DaemonSet %s 处于非健康状态", ds.Namespace, ds.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("DaemonSet %s 警告", ds.Name), fmt.Sprintf("命名空间 %s 下的 DaemonSet %s 处于非健康状态", ds.Namespace, ds.Name), defaultLevel(1), []string{}))
 			}
 
 			var condition []apis.Condition
@@ -151,6 +152,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				Name:    "健康状态",
 				Message: dsHealthMessage,
 				Pass:    dsHealth,
+				Level:   1,
 			})
 
 			checkContainersProbeItem := CheckContainersProbe(ds.Spec.Template.Spec.Containers)
@@ -161,6 +163,8 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				items = append(items, grafanaItem...)
 			}
 
+			itemsCount := GetItemsCount(items)
+
 			daemonsetData := &apis.WorkloadData{
 				Name:      ds.Name,
 				Namespace: ds.Namespace,
@@ -168,7 +172,8 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				Status: &apis.Status{
 					Condition: condition,
 				},
-				Items: items,
+				Items:      items,
+				ItemsCount: itemsCount,
 			}
 
 			ResourceWorkloadArray.Daemonset = append(ResourceWorkloadArray.Daemonset, daemonsetData)
@@ -192,7 +197,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 		for _, ns := range selectorNamespaces {
 			statefulsetList, err := client.Clientset.AppsV1().StatefulSets(ns).List(context.TODO(), listOptions)
 			if err != nil {
-				return nil, nil, fmt.Errorf("Error listing StatefulSets: %v\n", err)
+				return nil, fmt.Errorf("Error listing StatefulSets: %v\n", err)
 			}
 
 			allStatefulSets = append(allStatefulSets, statefulsetList.Items...)
@@ -206,7 +211,6 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 			if !isStatefulSetAvailable(&sts) {
 				stsHealth = false
 				stsHealthMessage = fmt.Sprintf("命名空间 %s 下的 Statefulset %s 处于非健康状态", sts.Namespace, sts.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Statefulset %s 警告", sts.Name), fmt.Sprintf("命名空间 %s 下的 Statefulset %s 处于非健康状态", sts.Namespace, sts.Name), defaultLevel(1), []string{}))
 			}
 
 			var condition []apis.Condition
@@ -229,6 +233,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				Name:    "健康状态",
 				Message: stsHealthMessage,
 				Pass:    stsHealth,
+				Level:   1,
 			})
 
 			checkContainersProbeItem := CheckContainersProbe(sts.Spec.Template.Spec.Containers)
@@ -239,6 +244,8 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				items = append(items, grafanaItem...)
 			}
 
+			itemsCount := GetItemsCount(items)
+
 			statefulsetData := &apis.WorkloadData{
 				Name:      sts.Name,
 				Namespace: sts.Namespace,
@@ -246,7 +253,8 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				Status: &apis.Status{
 					Condition: condition,
 				},
-				Items: items,
+				Items:      items,
+				ItemsCount: itemsCount,
 			}
 
 			ResourceWorkloadArray.Statefulset = append(ResourceWorkloadArray.Statefulset, statefulsetData)
@@ -270,7 +278,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 		for _, ns := range selectorNamespaces {
 			jobList, err := client.Clientset.BatchV1().Jobs(ns).List(context.TODO(), listOptions)
 			if err != nil {
-				return nil, nil, fmt.Errorf("Error listing Jobs: %v\n", err)
+				return nil, fmt.Errorf("Error listing Jobs: %v\n", err)
 			}
 
 			allJob = append(allJob, jobList.Items...)
@@ -284,7 +292,6 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 			if !isJobCompleted(&j) {
 				jHealth = false
 				jHealthMessage = fmt.Sprintf("命名空间 %s 下的 Job %s 处于非健康状态", j.Namespace, j.Name)
-				resourceInspections = append(resourceInspections, apis.NewInspection(fmt.Sprintf("Job %s 警告", j.Name), fmt.Sprintf("命名空间 %s 下的 Job %s 处于非健康状态", j.Namespace, j.Name), defaultLevel(1), []string{}))
 			}
 
 			var condition []apis.Condition
@@ -307,6 +314,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				Name:    "健康状态",
 				Message: jHealthMessage,
 				Pass:    jHealth,
+				Level:   1,
 			})
 
 			checkContainersProbeItem := CheckContainersProbe(j.Spec.Template.Spec.Containers)
@@ -317,6 +325,8 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				items = append(items, grafanaItem...)
 			}
 
+			itemsCount := GetItemsCount(items)
+
 			jobData := &apis.WorkloadData{
 				Name:      j.Name,
 				Namespace: j.Namespace,
@@ -324,7 +334,8 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 				Status: &apis.Status{
 					Condition: condition,
 				},
-				Items: items,
+				Items:      items,
+				ItemsCount: itemsCount,
 			}
 
 			ResourceWorkloadArray.Job = append(ResourceWorkloadArray.Job, jobData)
@@ -332,7 +343,7 @@ func GetWorkloads(client *apis.Client, workloadConfig *apis.WorkloadConfig, task
 	}
 
 	logrus.Infof("[%s] Workload inspection completed", taskName)
-	return ResourceWorkloadArray, resourceInspections, nil
+	return ResourceWorkloadArray, nil
 }
 
 func CheckContainersProbe(containers []corev1.Container) *apis.Item {
@@ -358,4 +369,25 @@ func CheckContainersProbe(containers []corev1.Container) *apis.Item {
 		Message: message,
 		Pass:    pass,
 	}
+}
+
+func isDeploymentAvailable(deployment *appsv1.Deployment) bool {
+	for _, condition := range deployment.Status.Conditions {
+		if (condition.Type == "Failed" && condition.Status == "False") || condition.Reason == "Error" {
+			return false
+		}
+	}
+	return deployment.Status.AvailableReplicas >= *deployment.Spec.Replicas
+}
+
+func isDaemonSetAvailable(daemonset *appsv1.DaemonSet) bool {
+	return daemonset.Status.NumberAvailable >= daemonset.Status.DesiredNumberScheduled
+}
+
+func isStatefulSetAvailable(statefulset *appsv1.StatefulSet) bool {
+	return statefulset.Status.ReadyReplicas >= *statefulset.Spec.Replicas
+}
+
+func isJobCompleted(job *batchv1.Job) bool {
+	return job.Status.Succeeded >= *job.Spec.Completions
 }

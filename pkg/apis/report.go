@@ -117,6 +117,7 @@ type Item struct {
 	Name    string `json:"name"`
 	Pass    bool   `json:"pass"`
 	Message string `json:"message"`
+	Level   int    `json:"level"`
 }
 
 type Service struct {
@@ -275,10 +276,11 @@ func NewInspection(title, message string, level int, names []string) *Inspection
 	}
 }
 
-func NewItem(name, message string, pass bool) *Item {
+func NewItem(name, message string, pass bool, level int) *Item {
 	return &Item{
 		Name:    name,
 		Pass:    pass,
 		Message: message,
+		Level:   level,
 	}
 }

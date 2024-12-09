@@ -67,6 +67,14 @@ func Register() error {
 		clusterNodeConfig := apis.NewClusterNodeConfig()
 		clusterResourceConfig := apis.NewClusterResourceConfig()
 
+		clusterCoreConfig = &apis.ClusterCoreConfig{
+			ChartVersionCheck: &apis.ChartVersionCheck{
+				Enable:             true,
+				AllowVersion:       []string{},
+				ExcludedNamespaces: "cattle-fleet-system,cattle-monitoring-system,cattle-system,cattle-fleet-local-system,cattle-global-monitoring,cattle-inspection-system",
+			},
+		}
+
 		clusterNodeConfig = &apis.ClusterNodeConfig{
 			Enable: true,
 			NodeConfig: []*apis.NodeConfig{

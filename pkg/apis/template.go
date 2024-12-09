@@ -16,8 +16,15 @@ type KubernetesConfig struct {
 }
 
 type ClusterCoreConfig struct {
+	ChartVersionCheck *ChartVersionCheck `json:"chart_version_check"`
 	//EtcdHealthCheck
 	//APIServerHealthCheck
+}
+
+type ChartVersionCheck struct {
+	Enable             bool     `json:"enable"`
+	AllowVersion       []string `json:"allow_version"`
+	ExcludedNamespaces string   `json:"excluded_namespace"`
 }
 
 type ClusterNodeConfig struct {
@@ -108,7 +115,9 @@ func NewKubernetesConfig() []*KubernetesConfig {
 }
 
 func NewClusterCoreConfig() *ClusterCoreConfig {
-	return &ClusterCoreConfig{}
+	return &ClusterCoreConfig{
+		ChartVersionCheck: &ChartVersionCheck{},
+	}
 }
 
 func NewClusterNodeConfig() *ClusterNodeConfig {
