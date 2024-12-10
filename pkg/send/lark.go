@@ -270,7 +270,7 @@ func NotifyChat(appID, appSecret, fileName, filePath, message, taskName string) 
 	return nil
 }
 
-func NotifyUser(appID, appSecret, mobiles, emails, taskName string) error {
+func NotifyUser(appID, appSecret, mobiles, emails, message, taskName string) error {
 	logrus.Infof("[%s] Start notify send...", taskName)
 	// 创建 Client
 	client := lark.NewClient(appID, appSecret, lark.WithEnableTokenCache(false))
@@ -344,7 +344,7 @@ func NotifyUser(appID, appSecret, mobiles, emails, taskName string) error {
 			Body(larkim.NewCreateMessageReqBodyBuilder().
 				ReceiveId(*userId).
 				MsgType(`interactive`).
-				Content(`{"elements":[{"tag":"div","text":{"content":"This is the plain text","tag":"plain_text"}}],"header":{"template":"blue","title":{"content":"This is the title","tag":"plain_text"}}}`).
+				Content(`{"elements":[{"tag":"div","text":{"content":"` + message + `","tag":"plain_text"}}],"header":{"template":"blue","title":{"content":"巡检报告","tag":"plain_text"}}}`).
 				Build()).
 			Build()
 

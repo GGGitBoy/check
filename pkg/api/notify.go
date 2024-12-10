@@ -218,7 +218,7 @@ func TestNotify() http.Handler {
 				return
 			}
 		} else if notify.AppID != "" && notify.AppSecret != "" && (notify.Mobiles != "" || notify.Emails != "") {
-			err = send.NotifyUser(notify.AppID, notify.AppSecret, notify.Mobiles, notify.Emails, "Test")
+			err = send.NotifyUser(notify.AppID, notify.AppSecret, notify.Mobiles, notify.Emails, message, "Test")
 			if err != nil {
 				logrus.Errorf("Failed to send test notification: %v", err)
 				common.HandleError(rw, http.StatusInternalServerError, err)

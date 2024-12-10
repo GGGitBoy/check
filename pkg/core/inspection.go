@@ -286,7 +286,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 				return task, notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
 			}
 		} else if notify.AppID != "" && notify.AppSecret != "" && (notify.Mobiles != "" || notify.Emails != "") {
-			err = send.NotifyUser(notify.AppID, notify.AppSecret, notify.Mobiles, notify.Emails, sb.String())
+			err = send.NotifyUser(notify.AppID, notify.AppSecret, notify.Mobiles, notify.Emails, sb.String(), task.Name)
 			if err != nil {
 				return task, notifyFailed, fmt.Errorf("Failed to send notification: %v\n", err)
 			}
