@@ -368,6 +368,7 @@ func CheckContainersProbe(containers []corev1.Container) *apis.Item {
 		Name:    "健康检查设置",
 		Message: message,
 		Pass:    pass,
+		Level:   1,
 	}
 }
 

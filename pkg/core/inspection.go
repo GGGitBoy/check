@@ -66,7 +66,7 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 			}
 
 			if ok {
-				sendMessageDetail = append(sendMessageDetail, fmt.Sprintf("集群 %s 巡检警告：", k.ClusterName))
+				sendMessageDetail = append(sendMessageDetail, fmt.Sprintf("集群 %s 巡检失败项：", k.ClusterName))
 				logrus.Infof("[%s] Processing inspections for cluster: %s", task.Name, k.ClusterName)
 
 				// cluster
@@ -213,6 +213,8 @@ func Inspection(task *apis.Task) (*apis.Task, string, error) {
 					sendMessageDetail = append(sendMessageDetail, fmt.Sprintf("%s", r.Title))
 				}
 			}
+
+			sendMessageDetail = append(sendMessageDetail, fmt.Sprintf("--------------------"))
 
 			kubernetes = append(kubernetes, &apis.Kubernetes{
 				ClusterID:       k.ClusterID,

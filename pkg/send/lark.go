@@ -38,6 +38,52 @@ type Response struct {
 	Msg  string `json:"msg"`
 }
 
+type CardContent struct {
+	Elements []Element `json:"elements"`
+	Header   Header    `json:"header"`
+}
+
+type Header struct {
+	Template string `json:"template"`
+	Title    Title  `json:"title"`
+}
+
+type Title struct {
+	Content string `json:"content"`
+	Tag     string `json:"tag"`
+}
+
+type Element struct {
+	Tag  string `json:"tag"`
+	Text Text   `json:"text"`
+}
+
+type Text struct {
+	Content string `json:"content"`
+	Tag     string `json:"tag"`
+}
+
+func NewCardContent(message string) CardContent {
+	return CardContent{
+		Elements: []Element{
+			{
+				Text: Text{
+					Content: message,
+					Tag:     "plain_text",
+				},
+				Tag: "div",
+			},
+		},
+		Header: Header{
+			Template: "blue",
+			Title: Title{
+				Content: "巡检报告",
+				Tag:     "plain_text",
+			},
+		},
+	}
+}
+
 func Webhook(webhookURL, secret, text, taskName string) error {
 	logrus.Infof("[%s] Start webhook send...", taskName)
 	timestamp := time.Now().Unix()
@@ -338,13 +384,19 @@ func NotifyUser(appID, appSecret, mobiles, emails, message, taskName string) err
 		}
 	}
 
+	cardContent := NewCardContent(message)
+	data, err := json.Marshal(cardContent)
+	if err != nil {
+		return fmt.Errorf("Error marshaling Content data: %v\n", err)
+	}
+
 	for _, userId := range UserIdList {
 		createMessageReq := larkim.NewCreateMessageReqBuilder().
 			ReceiveIdType(`open_id`).
 			Body(larkim.NewCreateMessageReqBodyBuilder().
 				ReceiveId(*userId).
 				MsgType(`interactive`).
-				Content(`{"elements":[{"tag":"div","text":{"content":"` + message + `","tag":"plain_text"}}],"header":{"template":"blue","title":{"content":"巡检报告","tag":"plain_text"}}}`).
+				Content(string(data)).
 				Build()).
 			Build()
 
